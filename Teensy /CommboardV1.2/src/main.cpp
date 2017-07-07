@@ -5,6 +5,8 @@
 #include <i2c_t3.h>
 #include <time.h>
 #include <string>
+#include <vector>
+#include "msgpck.h"
 //test
 //AD-Channels-Addresses
 #define AD0 0x08 // 0001000
@@ -175,11 +177,12 @@ int getSensorData(int add, int ch)
 
 void loop(){
   rxSerialEventUsb();
-  size_t i = 0;
-  size_t j = 0;
+  uint8_t i = 8;
+  uint8_t u = 1;
+  // serialize it into simple buffer.
   //digitalWrite(ledPin, HIGH);
   //delay(50);
-    for ( i = 0; i < sizeof(segments); i++) {
+    /*for ( i = 0; i < sizeof(segments); i++) {
             Serial.println(sgmnts[i]);
         for ( j = 0; j < sizeof(channel); j++)  {
             data[i][j] = getSensorData(i,j);
@@ -197,9 +200,20 @@ void loop(){
         Serial.println(velRight[i]);
     }
     Serial.println(velRightChars[1]);
+    */
+    /*msgpck_write_map_header(&Serial, 2);
 
-  //digitalWrite(ledPin, LOW);
-  //delay(50);
+    msgpck_write_string(&Serial, "test1", 5);
+    delay(1000);
+    //msgpck_write_integer(&Serial, u);
+    //delay(1000);
+    msgpck_write_string(&Serial, "test2", 5);
+    delay(1000);
+    //msgpck_write_integer(&Serial, i);*/
+
+    Serial.println("Test");
+    delay(50);
+
 }
 
 void scanPort(){
