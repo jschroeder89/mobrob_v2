@@ -4,21 +4,23 @@
 #include <cstdio>
 #include <unistd.h>
 #include <iostream>
-#include <msgpack.hpp>
 
+#define sensorRead 1
+#define servoRead 2
+#define servoWrite 3
 
 int openPort(char const *port);
-char readPort(int fd);
+std::string readPort(int fd);
+int teensyRequest(int fd, int op);
+
 
 int openPort(char const *port) {
     int fd;
-    fd = open(port, O_RDWR |  O_NDELAY, O_SYNC);
-    //printf("Port:%s\n",port);
+    fd = open(port, O_RDWR |  O_NDELAY);
         if  (fd==-1) {
             perror("Port not found");
             return -1;
         }
-
         /*struct termios options;
 
         tcgetattr(fd, &options);
@@ -30,28 +32,42 @@ int openPort(char const *port) {
         options.c_lflag &= ~(ECHO|ICANON|IEXTEN|ISIG);
         tcflush( fd, TCIFLUSH );
         tcsetattr(fd, TCSANOW, &options);*/
-    std::cout << fd << std::endl;
     return fd;
 }
 
-char readPort(int fd) {
-    char buf[1024];
-    fd = read(fd, buf, 1);
-    if (fd<0) {
-        return -1;
+int teensyRequest(int fd, int op) {
+    char byte='0';
+    switch (op) {
+        case sensorRead:byte='1';
+        break;
+        case servoRead:byte='2';
+        break;
+        case servoWrite:byte='3';
+        break;
     }
-    return *buf;
+    fd = write(fd, &byte, sizeof byte);
+    std::cout << byte << std::endl;
+    return 0;
 }
 
+std::string readPort(int fd) {
+    char buf[6];
+    std::string temp;
+    do {
+        fd = read(fd, buf, sizeof buf);
+    } while(buf[5]!='}');
+        for (size_t i = 0; i < sizeof buf; i++) {
+            temp.push_back(buf[i]);
+        }
+    return temp;
+}
 
 int main(int argc, char *argv[]) {
-  int fd=0;
+  int fd{0};
+  std::string temp;
   fd=openPort("/dev/ttyACM0");
-  std::cout << "Here" << std::endl;
-  char buffer;
-  while (1) {
-      buffer=readPort(fd);
-      std::cout << buffer << std::endl;
-  }
+  //temp=readPort(fd);
+  //std::cout << temp << std::endl;
+  teensyRequest(fd, servoRead);
   return 0;
 }
