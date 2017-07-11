@@ -95,7 +95,6 @@ volatile bool scanMode=false;           //if scanMode is set to true, the servos
                                         //in the scanPort function automatically
 
 
-
 uint8_t rcvdPktUsb[MAX_LENGTH_OF_MESSAGE];
 uint8_t posInArrayUsb=0;
 
@@ -151,9 +150,9 @@ void setup(){
   event3.clear();
 
 
-  delay(4000);
+  //delay(4000);
   scanPort();
-  delay(2000);
+  //delay(2000);
 }
 
 int getSensorData(int add, int ch)
@@ -184,22 +183,30 @@ void loop(){
     JsonObject& root=jsonBuffer.createObject();
     JsonArray& sensorData =root.createNestedArray("sensorData");
 
-    while (Serial.available()) {
+
+    if (Serial.available()>0) {
         incomingByte=Serial.read();
-        delay(500);
-        
+        //delay(500);
+
         switch (incomingByte) {
             case sensorRead:
+            incomingByte='0';
+            if (Serial.availableForWrite()>0) {
                 sensorData.add(4095);
                 sensorData.add(1204);
+                Serial.write("{test}");
+            }
+
                 //sensorData.add(3230);
                 //sensorData.add(2383);
-                size=root.measureLength();
-                Serial.write(size);
-                incomingByte=Serial.read();
-                    if (incomingByte==acknowledgeSize) {
-                        root.printTo(Serial);
-                    }
+                //size=root.measureLength();
+                //delay(200);
+                //Serial.println(size);
+                //Serial.print('x');
+
+
+                //incomingByte=Serial.read();
+                //root.printTo(Serial);
                 break;
                 case servoRead:Serial.println(incomingByte);
                     break;

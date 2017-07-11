@@ -16,7 +16,7 @@
 int openPort(char const *port);
 std::string readPort(int fd);
 int teensyRequest(int fd, int op);
-
+int msgSize(int fd);
 
 int openPort(char const *port) {
     int fd;
@@ -58,31 +58,33 @@ int teensyRequest(int fd, int op) {
 }
 
 int getMsgSize(int fd) {
-    char buf[3]{};
+    char buf[6]{};
     std::string temp;
     int msgSize;
     char ack=acknowledgeSize;
 
     do {
-        fd = read(fd , buf, sizeof buf);
-    } while(buf[sizeof buf]!=' ');
+        read(fd , buf, sizeof buf);
+    } while(buf[5]!='}');
 
         for (size_t i = 0; i < sizeof buf; i++) {
             temp.push_back(buf[i]);
         }
 
+    std::cout << temp << std::endl;
     msgSize=std::stoi(temp);
-    fd = write(fd, &ack, sizeof ack);
+    write(fd, &ack, sizeof ack);
     return msgSize;
 }
 
-std::string readPort(int fd, int bufferSize) {
-    char buf[bufferSize]{};
+std::string readPort(int fd) {
+    char buf[6]{};
     std::string temp;
 
     do {
-        fd = read(fd, buf, sizeof buf);
-    } while(buf[sizeof buf]!='}');
+        read(fd, buf, sizeof buf);
+    } while(buf[5]!='}');
+    std::cout << buf << std::endl;
 
         for (size_t i = 0; i < sizeof buf; i++) {
             temp.push_back(buf[i]);
@@ -96,7 +98,8 @@ int main(int argc, char *argv[]) {
   std::string temp;
   fd=openPort("/dev/ttyACM0");
   teensyRequest(fd, sensorRead);
-  temp=readPort(fd, getMsgSize(fd));
+  getMsgSize(fd);
+  //temp=readPort(fd);
   std::cout << temp << std::endl;
   return 0;
 }
