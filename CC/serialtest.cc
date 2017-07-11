@@ -11,7 +11,7 @@
 #define servoReadByte '2'
 #define servoWrite 3
 #define servoWriteByte '3'
-
+#define acknowledgeSize 'a'
 
 int openPort(char const *port);
 std::string readPort(int fd);
@@ -20,7 +20,8 @@ int teensyRequest(int fd, int op);
 
 int openPort(char const *port) {
     int fd;
-    fd = open(port, O_RDWR |  O_NDELAY);
+    fd = open(port, O_RDWR | O_NDELAY);
+
         if  (fd==-1) {
             perror("Port not found");
             return -1;
@@ -41,6 +42,7 @@ int openPort(char const *port) {
 
 int teensyRequest(int fd, int op) {
     char byte='0';
+
     switch (op) {
         case sensorRead:byte=sensorReadByte;
             break;
@@ -49,34 +51,43 @@ int teensyRequest(int fd, int op) {
                 case servoWrite:byte=servoWriteByte;
                     break;
     }
+
     fd = write(fd, &byte, sizeof byte);
     std::cout << byte << std::endl;
     return 0;
 }
 
 int getMsgSize(int fd) {
-    char msgSize[3]{};
+    char buf[3]{};
     std::string temp;
-    int size;
-        do {
-            fd = read(fd , msgSize, sizeof msgSize);
-        } while(msgSize[3]!=' ');
-    for (size_t i = 0; i < sizeof msgSize; i++) {
-        temp.push_back(msgSize[i]);
-    }
-    size=std::stoi(temp);
-    return size;
+    int msgSize;
+    char ack=acknowledgeSize;
+
+    do {
+        fd = read(fd , buf, sizeof buf);
+    } while(buf[sizeof buf]!=' ');
+
+        for (size_t i = 0; i < sizeof buf; i++) {
+            temp.push_back(buf[i]);
+        }
+
+    msgSize=std::stoi(temp);
+    fd = write(fd, &ack, sizeof ack);
+    return msgSize;
 }
 
 std::string readPort(int fd, int bufferSize) {
     char buf[bufferSize]{};
     std::string temp;
-        do {
-            fd = read(fd, buf, sizeof buf);
-        } while(buf[bufferSize]!='}');
-    for (size_t i = 0; i < sizeof buf; i++) {
-        temp.push_back(buf[i]);
-    }
+
+    do {
+        fd = read(fd, buf, sizeof buf);
+    } while(buf[sizeof buf]!='}');
+
+        for (size_t i = 0; i < sizeof buf; i++) {
+            temp.push_back(buf[i]);
+        }
+
     return temp;
 }
 

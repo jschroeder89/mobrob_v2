@@ -187,10 +187,13 @@ void loop(){
     while (Serial.available()) {
         incomingByte=Serial.read();
         delay(500);
+        
         switch (incomingByte) {
             case sensorRead:
                 sensorData.add(4095);
                 sensorData.add(1204);
+                //sensorData.add(3230);
+                //sensorData.add(2383);
                 size=root.measureLength();
                 Serial.write(size);
                 incomingByte=Serial.read();
