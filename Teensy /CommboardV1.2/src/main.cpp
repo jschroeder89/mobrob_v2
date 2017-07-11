@@ -30,6 +30,10 @@
 #define CH7       0xF8 // 11111000
 #define CHGLOBAL  0xD6 // 11010110
 
+#define sensorRead '1'
+#define servoRead '2'
+#define servoWrite '3'
+#define acknowledgeSize 'a'
 //Arrays
 uint8_t segments[5] = {1,2,3,4,5};
 char sgmnts[5]= {'A','B','C','D','E'};
@@ -175,10 +179,30 @@ int getSensorData(int add, int ch)
 }
 
 void loop(){
+    int size=0;
+    StaticJsonBuffer<500> jsonBuffer;
+    JsonObject& root=jsonBuffer.createObject();
+    JsonArray& sensorData =root.createNestedArray("sensorData");
+
     while (Serial.available()) {
         incomingByte=Serial.read();
         delay(500);
-        Serial.println(incomingByte);
+        switch (incomingByte) {
+            case sensorRead:
+                sensorData.add(4095);
+                sensorData.add(1204);
+                size=root.measureLength();
+                Serial.write(size);
+                incomingByte=Serial.read();
+                    if (incomingByte==acknowledgeSize) {
+                        root.printTo(Serial);
+                    }
+                break;
+                case servoRead:Serial.println(incomingByte);
+                    break;
+                    case servoWrite:Serial.println(incomingByte);
+                        break;
+        }
     }
 
     /*while (Serial.availableForWrite()>0) {

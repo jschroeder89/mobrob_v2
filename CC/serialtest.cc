@@ -6,8 +6,12 @@
 #include <iostream>
 
 #define sensorRead 1
+#define sensorReadByte '1'
 #define servoRead 2
+#define servoReadByte '2'
 #define servoWrite 3
+#define servoWriteByte '3'
+
 
 int openPort(char const *port);
 std::string readPort(int fd);
@@ -38,27 +42,41 @@ int openPort(char const *port) {
 int teensyRequest(int fd, int op) {
     char byte='0';
     switch (op) {
-        case sensorRead:byte='1';
-        break;
-        case servoRead:byte='2';
-        break;
-        case servoWrite:byte='3';
-        break;
+        case sensorRead:byte=sensorReadByte;
+            break;
+            case servoRead:byte=servoReadByte;
+                break;
+                case servoWrite:byte=servoWriteByte;
+                    break;
     }
     fd = write(fd, &byte, sizeof byte);
     std::cout << byte << std::endl;
     return 0;
 }
 
-std::string readPort(int fd) {
-    char buf[6];
+int getMsgSize(int fd) {
+    char msgSize[3]{};
     std::string temp;
-    do {
-        fd = read(fd, buf, sizeof buf);
-    } while(buf[5]!='}');
-        for (size_t i = 0; i < sizeof buf; i++) {
-            temp.push_back(buf[i]);
-        }
+    int size;
+        do {
+            fd = read(fd , msgSize, sizeof msgSize);
+        } while(msgSize[3]!=' ');
+    for (size_t i = 0; i < sizeof msgSize; i++) {
+        temp.push_back(msgSize[i]);
+    }
+    size=std::stoi(temp);
+    return size;
+}
+
+std::string readPort(int fd, int bufferSize) {
+    char buf[bufferSize]{};
+    std::string temp;
+        do {
+            fd = read(fd, buf, sizeof buf);
+        } while(buf[bufferSize]!='}');
+    for (size_t i = 0; i < sizeof buf; i++) {
+        temp.push_back(buf[i]);
+    }
     return temp;
 }
 
@@ -66,8 +84,8 @@ int main(int argc, char *argv[]) {
   int fd{0};
   std::string temp;
   fd=openPort("/dev/ttyACM0");
-  //temp=readPort(fd);
-  //std::cout << temp << std::endl;
-  teensyRequest(fd, servoRead);
+  teensyRequest(fd, sensorRead);
+  temp=readPort(fd, getMsgSize(fd));
+  std::cout << temp << std::endl;
   return 0;
 }
