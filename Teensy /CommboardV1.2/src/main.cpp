@@ -181,7 +181,7 @@ void loop(){
     StaticJsonBuffer<500> jsonBuffer;
     JsonObject& root=jsonBuffer.createObject();
     JsonArray& sensorData =root.createNestedArray("sensorData");
-
+    
     if (Serial.available()>0) {
         incomingByte=Serial.read();
         //delay(500);
