@@ -178,11 +178,9 @@ int getSensorData(int add, int ch)
 }
 
 void loop(){
-    int size=0;
     StaticJsonBuffer<500> jsonBuffer;
     JsonObject& root=jsonBuffer.createObject();
     JsonArray& sensorData =root.createNestedArray("sensorData");
-
 
     if (Serial.available()>0) {
         incomingByte=Serial.read();
@@ -194,19 +192,11 @@ void loop(){
             if (Serial.availableForWrite()>0) {
                 sensorData.add(4095);
                 sensorData.add(1204);
-                Serial.write("{test}");
+                sensorData.add(3230);
+                sensorData.add(2383);
+                root.printTo(Serial);
+
             }
-
-                //sensorData.add(3230);
-                //sensorData.add(2383);
-                //size=root.measureLength();
-                //delay(200);
-                //Serial.println(size);
-                //Serial.print('x');
-
-
-                //incomingByte=Serial.read();
-                //root.printTo(Serial);
                 break;
                 case servoRead:Serial.println(incomingByte);
                     break;

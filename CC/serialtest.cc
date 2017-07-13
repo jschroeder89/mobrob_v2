@@ -4,6 +4,7 @@
 #include <cstdio>
 #include <unistd.h>
 #include <iostream>
+#include <cstring>
 
 #define sensorRead 1
 #define sensorReadByte '1'
@@ -11,12 +12,10 @@
 #define servoReadByte '2'
 #define servoWrite 3
 #define servoWriteByte '3'
-#define acknowledgeSize 'a'
 
 int openPort(char const *port);
 std::string readPort(int fd);
 int teensyRequest(int fd, int op);
-int msgSize(int fd);
 
 int openPort(char const *port) {
     int fd;
@@ -41,7 +40,7 @@ int openPort(char const *port) {
 }
 
 int teensyRequest(int fd, int op) {
-    char byte='0';
+    char byte{};
 
     switch (op) {
         case sensorRead:byte=sensorReadByte;
@@ -52,44 +51,19 @@ int teensyRequest(int fd, int op) {
                     break;
     }
 
-    fd = write(fd, &byte, sizeof byte);
-    std::cout << byte << std::endl;
+    write(fd, &byte, sizeof byte);
     return 0;
 }
 
-int getMsgSize(int fd) {
-    char buf[6]{};
-    std::string temp;
-    int msgSize;
-    char ack=acknowledgeSize;
-
-    do {
-        read(fd , buf, sizeof buf);
-    } while(buf[5]!='}');
-
-        for (size_t i = 0; i < sizeof buf; i++) {
-            temp.push_back(buf[i]);
-        }
-
-    std::cout << temp << std::endl;
-    msgSize=std::stoi(temp);
-    write(fd, &ack, sizeof ack);
-    return msgSize;
-}
-
 std::string readPort(int fd) {
-    char buf[6]{};
     std::string temp;
+    char c;
 
-    do {
-        read(fd, buf, sizeof buf);
-    } while(buf[5]!='}');
-    std::cout << buf << std::endl;
-
-        for (size_t i = 0; i < sizeof buf; i++) {
-            temp.push_back(buf[i]);
-        }
-
+        do {
+            read(fd, &c, 1);
+            temp.push_back(c);
+        } while(c!='}');
+        std::cout << temp << std::endl;
     return temp;
 }
 
@@ -98,8 +72,6 @@ int main(int argc, char *argv[]) {
   std::string temp;
   fd=openPort("/dev/ttyACM0");
   teensyRequest(fd, sensorRead);
-  getMsgSize(fd);
-  //temp=readPort(fd);
-  std::cout << temp << std::endl;
+  temp=readPort(fd);
   return 0;
 }
