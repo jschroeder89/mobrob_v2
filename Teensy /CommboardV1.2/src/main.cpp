@@ -179,21 +179,25 @@ int getSensorData(int add, int ch)
 
 void loop(){
     StaticJsonBuffer<500> jsonBuffer;
-    JsonObject& root=jsonBuffer.createObject();
-    JsonArray& sensorData =root.createNestedArray("sensorData");
-    
-    if (Serial.available()>0) {
+    JsonObject& root = jsonBuffer.createObject();
+
+    if (Serial.available() > 0) {
         incomingByte=Serial.read();
         //delay(500);
 
         switch (incomingByte) {
             case sensorRead:
-            incomingByte='0';
-            if (Serial.availableForWrite()>0) {
-                sensorData.add(4095);
-                sensorData.add(1204);
-                sensorData.add(3230);
-                sensorData.add(2383);
+            if (Serial.availableForWrite() > 0) {
+                root["data"] = "sensor";
+                JsonArray& sensorF = root.createNestedArray("F");
+                JsonArray& sensorR = root.createNestedArray("R");
+                JsonArray& sensorL = root.createNestedArray("L");
+                JsonArray& sensorB = root.createNestedArray("B");
+                sensorF.add(4095);
+                sensorF.add(1204);
+                sensorL.add(3230);
+                sensorR.add(2383);
+                sensorB.add(2383);
                 root.printTo(Serial);
 
             }
@@ -214,7 +218,6 @@ void loop(){
   //rxSerialEventUsb();
   //uint8_t i = 8;
   //uint8_t u = 1;
-  // serialize it into simple buffer.
   //digitalWrite(ledPin, HIGH);
   //delay(50);
     /*for ( i = 0; i < sizeof(segments); i++) {
