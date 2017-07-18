@@ -5,7 +5,9 @@
 #include <i2c_t3.h>
 #include <time.h>
 #include <string>
-//test
+#include <vector>
+#include <ArduinoJson.h>
+//#include <iostream>
 //AD-Channels-Addresses
 #define AD0 0x08 // 0001000
 #define AD1 0x09 // 0001001
@@ -28,6 +30,10 @@
 #define CH7       0xF8 // 11111000
 #define CHGLOBAL  0xD6 // 11010110
 
+#define sensorRead '1'
+#define servoRead '2'
+#define servoWrite '3'
+#define acknowledgeSize 'a'
 //Arrays
 uint8_t segments[5] = {1,2,3,4,5};
 char sgmnts[5]= {'A','B','C','D','E'};
@@ -39,6 +45,7 @@ int data[5][8];
 int ledPin=13;
 int velLeft[2]={0};
 int velRight[2]={0};
+char incomingByte;
 
 Uart1Event event1;//initialize UART A of the Teensy for enhanced features like DMA capability
 Uart2Event event2;//initialize UART B ""
@@ -88,7 +95,6 @@ volatile bool scanMode=false;           //if scanMode is set to true, the servos
                                         //in the scanPort function automatically
 
 
-
 uint8_t rcvdPktUsb[MAX_LENGTH_OF_MESSAGE];
 uint8_t posInArrayUsb=0;
 
@@ -131,7 +137,6 @@ void setup(){
   event1.begin(1000000);                        //defines the baudrate for the corresponding port
   event1.clear();                               //clears
 
-
   event2.txEventHandler = txEvent2;
   event2.rxEventHandler = rxEvent2;
   event2.rxBufferSizeTrigger = 1;
@@ -145,15 +150,15 @@ void setup(){
   event3.clear();
 
 
-  delay(4000);
+  //delay(4000);
   scanPort();
-  delay(2000);
+  //delay(2000);
 }
 
 int getSensorData(int add, int ch)
 {
   //i2c = Wire;
-  digitalWrite(13, HIGH);
+  //digitalWrite(13, HIGH);
 
   Wire.beginTransmission(address[add]);     // slave addr
   Wire.write(channel[ch]);
@@ -169,17 +174,53 @@ int getSensorData(int add, int ch)
       return number;
     }
   }
-//digitalWrite(13, LOW);
   return -1;
 }
 
 void loop(){
-  rxSerialEventUsb();
-  size_t i = 0;
-  size_t j = 0;
+    StaticJsonBuffer<500> jsonBuffer;
+    JsonObject& root = jsonBuffer.createObject();
+
+    if (Serial.available() > 0) {
+        incomingByte=Serial.read();
+        //delay(500);
+
+        switch (incomingByte) {
+            case sensorRead:
+            if (Serial.availableForWrite() > 0) {
+                root["data"] = "sensor";
+                JsonArray& sensorF = root.createNestedArray("F");
+                JsonArray& sensorR = root.createNestedArray("R");
+                JsonArray& sensorL = root.createNestedArray("L");
+                JsonArray& sensorB = root.createNestedArray("B");
+                sensorF.add(4095);
+                sensorF.add(1204);
+                sensorL.add(3230);
+                sensorR.add(2383);
+                sensorB.add(2383);
+                root.printTo(Serial);
+
+            }
+                break;
+                case servoRead:Serial.println(incomingByte);
+                    break;
+                    case servoWrite:Serial.println(incomingByte);
+                        break;
+        }
+    }
+
+    /*while (Serial.availableForWrite()>0) {
+        delay(100);
+        Serial.write("{test}");
+        delay(100);
+
+    }*/
+  //rxSerialEventUsb();
+  //uint8_t i = 8;
+  //uint8_t u = 1;
   //digitalWrite(ledPin, HIGH);
   //delay(50);
-    for ( i = 0; i < sizeof(segments); i++) {
+    /*for ( i = 0; i < sizeof(segments); i++) {
             Serial.println(sgmnts[i]);
         for ( j = 0; j < sizeof(channel); j++)  {
             data[i][j] = getSensorData(i,j);
@@ -197,9 +238,11 @@ void loop(){
         Serial.println(velRight[i]);
     }
     Serial.println(velRightChars[1]);
+    */
 
-  //digitalWrite(ledPin, LOW);
-  //delay(50);
+    //Serial.println("test");
+
+
 }
 
 void scanPort(){
@@ -213,8 +256,6 @@ void scanPort(){
   {
     search[i]=0;
   }
-
-
 
   for(int k=0;k<8;k++){
     for (int j=32*k;j<32*(k+1);j++){
@@ -235,25 +276,7 @@ void scanPort(){
       queue3.push(ScanMessage3);
 
     }
-      /*
-      uint8_t testArray[64];
-      for (int j=0;j<64;j++)
-      {
-        testArray[j]=0;
-      }
-      testArray[0]=255;
-      testArray[1]=255;
-      testArray[2]=1;
-      testArray[3]=5;
-      testArray[4]=3;
-      testArray[5]=32;
-      testArray[6]=15;
-      testArray[7]=0;
-      testArray[8]=199;
 
-      DynamixelMessage* newMessage = new DynamixelMessage(testArray);
-      queue1.push(newMessage);
-      */
     send1();
     send2();
     send3();
@@ -279,27 +302,15 @@ void rxSerialEventUsb(){
       if(rcvdPktUsb[0] == 255 && rcvdPktUsb[1] == 255){
         while(posInArrayUsb<rcvdPktUsb[3]+4){
           rcvdPktUsb[posInArrayUsb]=Serial.read();
-          //Serial.println("read a byte:");
-          //Serial.println(rcvdPktUsb[posInArrayUsb]);
           posInArrayUsb++;
         }
-        //Serial.println("done.");
           if ((posInArrayUsb)==(rcvdPktUsb[3]+4)){
           uint8_t testchksum=0;
           for(int p=2;p<=rcvdPktUsb[3]+2;p++){                 //checksum test for message from USB
               testchksum=testchksum+rcvdPktUsb[p];
           }
           testchksum=~(testchksum)&255;
-          //Serial.println("testchcksum is :");
-         // Serial.println(testchksum);
           if(testchksum!=rcvdPktUsb[posInArrayUsb-1]){
-            //Serial.println("Wrong checksum from Usb, packet is: ");
-            for(int i=0;i<=posInArrayUsb;i++)
-            {
-              //Serial.print(i);
-              //Serial.print(": ");
-              //Serial.println(rcvdPktUsb[i]);
-            }
           }else if(testchksum==rcvdPktUsb[posInArrayUsb-1]){//Message seems to look good.Creation of Dynamixel Object and putting into Queue
             //Serial.println("Checksum correct, creating message object");
             DynamixelMessage* USBMessage=new DynamixelMessage(rcvdPktUsb);
