@@ -7,6 +7,7 @@
 #include <cstring>
 #include <ArduinoJson.h>
 
+//Defines
 #define sensorRead 1
 #define sensorReadByte '1'
 #define servoRead 2
@@ -15,7 +16,7 @@
 #define servoWriteByte '3'
 #define bufLen 512
 
-
+//Prototypes
 int openPort(char const *port);
 std::string readPort(int fd);
 int teensyRequest(int fd, int op);
@@ -44,7 +45,7 @@ int openPort(char const *port) {
 }
 
 int teensyRequest(int fd, int op) {
-    char byte{};
+    char byte;
 
     switch (op) {
         case sensorRead:
@@ -63,9 +64,10 @@ int teensyRequest(int fd, int op) {
 }
 
 std::string readPort(int fd) {
+
     std::string s;
     char buf[bufLen];
-    int n{0}, nbytes{0};
+    int n = 0, nbytes = 0;
 
         do {
             n = read(fd, buf+nbytes, bufLen-nbytes);
@@ -79,7 +81,7 @@ std::string readPort(int fd) {
             if (nbytes == 0) {
             }
             if (n == -1) {
-                return {};
+                return "";
             }
             nbytes += n;
             if (buf[nbytes-1] == '}') {
@@ -92,6 +94,7 @@ std::string readPort(int fd) {
 }
 
 int jsonParser(std::string json) {
+
     StaticJsonBuffer<500> jsonBuffer;
     JsonObject& root = jsonBuffer.parseObject(json);
     std::string dataType = root["data"];
@@ -102,18 +105,36 @@ int jsonParser(std::string json) {
         int dataL = root["L"][0];
         int dataB = root["B"][0];
 
-        std::cout << dataB << std::endl;
+        std::cout << dataR << std::endl;
     }
 
 
     return 0;
 }
 
+void createJsonString(int fd) {
+    StaticJsonBuffer<200> jsonBuffer;
+    JsonObject& root = jsonBuffer.createObject();
+    char buffer[256];
+    root["data"] = "servoVels";
+    //root["velLeft"] = 20;
+    //root["velRight"] = 30;
+
+    JsonArray& servoData = root.createNestedArray("servoData");
+    servoData.add(100);
+    servoData.add(120);
+    root.printTo(buffer, sizeof buffer);
+    write(fd, &buffer, sizeof buffer);
+    std::cout << root << std::endl;
+}
+
+
 int main(int argc, char *argv[]) {
-  int fd{0};
+  int fd = 0;
   std::string s;
   fd = openPort("/dev/ttyACM0");
-  teensyRequest(fd, sensorRead);
-  jsonParser(readPort(fd));
+  createJsonString(fd);
+  //teensyRequest(fd, sensorRead);
+  //jsonParser(readPort(fd));
   return 0;
 }

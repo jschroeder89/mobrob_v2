@@ -7,7 +7,7 @@
 #include <string>
 #include <vector>
 #include <ArduinoJson.h>
-//#include <iostream>
+
 //AD-Channels-Addresses
 #define AD0 0x08 // 0001000
 #define AD1 0x09 // 0001001
@@ -30,10 +30,17 @@
 #define CH7       0xF8 // 11111000
 #define CHGLOBAL  0xD6 // 11010110
 
-#define sensorRead '1'
-#define servoRead '2'
-#define servoWrite '3'
+#define sensorReadByte '1'
+#define servoReadByte '2'
+#define servoWriteByte '3'
 #define acknowledgeSize 'a'
+
+#define HEADER 0XFF
+
+
+#define sensorRead 1
+#define servoRead 2
+#define servoWrite 3
 //Arrays
 uint8_t segments[5] = {1,2,3,4,5};
 char sgmnts[5]= {'A','B','C','D','E'};
@@ -177,15 +184,55 @@ int getSensorData(int add, int ch)
   return -1;
 }
 
-void loop(){
+void jsonConstructor(int op) {
     StaticJsonBuffer<500> jsonBuffer;
     JsonObject& root = jsonBuffer.createObject();
 
-    if (Serial.available() > 0) {
-        incomingByte=Serial.read();
-        //delay(500);
+}
 
+void dynaPacketConstructor() {
+
+}
+
+void requestHandler() {
+    if (Serial.available() > 0) {
+        incomingByte = Serial.read();
         switch (incomingByte) {
+            case sensorReadByte:
+                jsonConstructor(sensorRead);
+            case servoReadByte:
+                jsonConstructor(servoRead);
+            case servoWrite:
+                dynaPacketConstructor();
+        }
+    }
+}
+
+char readJsonString() {
+    StaticJsonBuffer<200> jsonBuffer;
+    char buf[200], c;
+    int index = 0;
+    do {
+        c = Serial.read();
+        buf[index]=c;
+        index++;
+        delay(100);
+
+        Serial.println(c);
+    } while(c!='}');
+    buf[index]='\0';
+    JsonObject& root = jsonBuffer.parseObject(buf);
+    int data = root["servoData"][0];
+    return 0;
+}
+
+void loop() {
+    //StaticJsonBuffer<500> jsonBuffer;
+    //JsonObject& root = jsonBuffer.createObject();
+    delay(300);
+    readJsonString();
+
+        /*switch (incomingByte) {
             case sensorRead:
             if (Serial.availableForWrite() > 0) {
                 root["data"] = "sensor";
@@ -206,8 +253,8 @@ void loop(){
                     break;
                     case servoWrite:Serial.println(incomingByte);
                         break;
-        }
-    }
+        }*/
+
 
     /*while (Serial.availableForWrite()>0) {
         delay(100);
