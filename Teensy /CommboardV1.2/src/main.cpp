@@ -352,7 +352,7 @@ void jsonSensorConstructor() {
     StaticJsonBuffer<bufLen> jsonBuffer;
     JsonObject& root = jsonBuffer.createObject();
     int sensorData[5][8] = {0};
-    
+
     root["data"] = "sensor";
     JsonArray& sensorF = root.createNestedArray("F");
     JsonArray& sensorR = root.createNestedArray("R");
@@ -366,7 +366,7 @@ void jsonSensorConstructor() {
     }
     for (size_t i = 0; i <= 2; i++) {
         for (int j = 0; j < 8; j++) {
-            sensorF.add(sensorData[i][j]);
+            sensorF.add(sensorData[j][i]);
             sensorL.add(sensorData[4][i]);
             sensorB.add(sensorData[3][i]);
             sensorR.add(sensorData[2][i]);
