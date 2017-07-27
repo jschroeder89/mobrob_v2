@@ -6,6 +6,7 @@
 #include <time.h>
 #include <string>
 #include <vector>
+#include <cstdint>
 #include <ArduinoJson.h>
 
 //AD-Channels-Addresses
@@ -35,12 +36,14 @@
 #define servoWriteByte '3'
 #define acknowledgeSize 'a'
 
-#define HEADER 0XFF
-
+#define FF 255
+#define _LENGHT 5
+#define _NUM_OF_BYTES_TO_READ 2
 
 #define sensorRead 1
 #define servoRead 2
 #define servoWrite 3
+#define bufLen 512
 //Arrays
 uint8_t segments[5] = {1,2,3,4,5};
 char sgmnts[5]= {'A','B','C','D','E'};
@@ -53,6 +56,7 @@ int ledPin=13;
 int velLeft[2]={0};
 int velRight[2]={0};
 char incomingByte;
+boolean newData = false;
 
 Uart1Event event1;//initialize UART A of the Teensy for enhanced features like DMA capability
 Uart2Event event2;//initialize UART B ""
@@ -134,10 +138,20 @@ void pushToQueue2(DynamixelMessage* messageToPush);
 void pushToQueue3(DynamixelMessage* messageToPush);
 void scanPort();
 
+void requestHandler();
+void jsonServoConstructor(int* dataArray);
+void jsonSensorConstructor();
+void jsonParser();
+void servoWriteConstructor(uint8_t* servoPckt);
+void servoReadConstructor(int* servoPckt);
+void readVelFromPckt(Vector<int>* servoPckt);
+void checkSumAndPush();
+String getServoVel();
+
 void setup(){
   Wire.begin(I2C_MASTER, 0x00, I2C_PINS_18_19, I2C_PULLUP_EXT, I2C_RATE_400);
   Serial.begin(9600);
-  pinMode(13, LOW);
+  pinMode(13, OUTPUT);
   event1.txEventHandler = txEvent1;             //defines the function to trigger for sent bytes on Port 1 of the Teensy
   event1.rxEventHandler = rxEvent1;             //defines the function to trigger for received bytes on Port 1 of the Teensy
   event1.rxBufferSizeTrigger = 1;               //defines how many bytes have to enter the input buffer until the interrupt triggers the interrupt function
@@ -156,17 +170,16 @@ void setup(){
   event3.begin(1000000);
   event3.clear();
 
-
-  //delay(4000);
+  digitalWrite(13, HIGH);
+  delay(4000);
   scanPort();
-  //delay(2000);
+  delay(2000);
+  digitalWrite(13, LOW);
 }
+
 
 int getSensorData(int add, int ch)
 {
-  //i2c = Wire;
-  //digitalWrite(13, HIGH);
-
   Wire.beginTransmission(address[add]);     // slave addr
   Wire.write(channel[ch]);
   int status = Wire.endTransmission();
@@ -184,14 +197,193 @@ int getSensorData(int add, int ch)
   return -1;
 }
 
-void jsonConstructor(int op) {
-    StaticJsonBuffer<500> jsonBuffer;
+String getServoVel() {
+    static byte idx = 0;
+    static boolean inProgress = false;
+    char  c;
+    char buf[bufLen];
+    String s;
+
+    while (Serial.available() > 0 && newData == false) {
+        c = Serial.read();
+        if (inProgress == true) {
+            if (c != '}') {
+                buf[idx] = c;
+                idx++;
+                if (idx >= bufLen) {
+                    idx = bufLen-1;
+                }
+            }
+            else {
+                buf[idx] = '\0';
+                idx = 0;
+                newData = true;
+                inProgress = false;
+                /*s = buf;
+                jsonParser(s);*/
+            }
+        }
+        else if (c == '{') {
+            inProgress = true;
+            buf[idx] = '{';
+            idx++;
+        }
+
+    }
+    //delay(300);
+    newData = false;
+    s = buf;
+    s.append('}');
+    //Serial.println(s);
+    return s;
+}
+
+void checkSumAndPushToQueue(uint8_t* servoPckt) {
+    size_t checkSum = 0, checkSumPos = 0, len = 0;
+
+    len = servoPckt[3] + 2;
+    checkSumPos =  len + 1;
+        for (size_t i = 2; i <= len; i++) {
+            checkSum += servoPckt[i];
+        }
+    checkSum = ~(checkSum) & 255;
+    servoPckt[checkSumPos] = checkSum;
+    DynamixelMessage* USBMessage = new DynamixelMessage(servoPckt);
+
+    if (idMap[servoPckt[2]] == 1 || scanMode) {
+        pushToQueue1(USBMessage);
+    }
+    else if (idMap[servoPckt[2]] == 2 || scanMode) {
+        pushToQueue2(USBMessage);
+    }
+    else if (idMap[servoPckt[2]] == 3 || scanMode) {
+        pushToQueue3(USBMessage);
+    }
+    else if (idMap[servoPckt[2]] == 0) {
+        delete USBMessage;
+    }
+}
+
+void readVelFromPckt(Vector<int>* servoPckt) {
+    int lowByte = 0, highByte = 0;
+    static int velLeft, velRight;
+    static boolean velLeftNotEmpty;
+    static boolean velRightNotEmpty;
+
+    if (servoPckt->at(0) == 1 && velLeftNotEmpty == true) {
+        lowByte = lowByte & 255;
+        highByte = highByte << 8;
+        velLeft = lowByte + highByte;
+        velLeftNotEmpty = false;
+        if (velLeft >= 1024) {
+            velLeft -= 1024;
+            velLeft *= (-1);
+        }
+    }
+    else if (servoPckt->at(0) == 2 && velRightNotEmpty == true) {
+        lowByte = lowByte & 255;
+        highByte = highByte << 8;
+        velRight = lowByte +  highByte;
+        velRightNotEmpty = false;
+        if (velRight > 1024) {
+            velRight -= 1024;
+        }
+        else {
+            velRight *= (-1);
+        }
+    }
+    if (velLeftNotEmpty && velRightNotEmpty == false) {
+        int velArray[2]{0};
+        velArray[0] = velLeft;
+        velArray[1] = velRight;
+        velLeft = 0, velRight = 0;
+        velLeftNotEmpty = true;
+        velRightNotEmpty = true;
+        jsonServoConstructor(&velArray[0]);
+    }
+}
+
+void servoReadConstructor() {
+    uint8_t servoPckt[8]{0};
+    for (size_t id = 1; id <=2; id++) {
+        servoPckt[0] = FF;
+        servoPckt[1] = FF;
+        servoPckt[2] = id;
+        servoPckt[3] = _LENGHT;
+        servoPckt[4] = _READ_SERVO_DATA;
+        servoPckt[5] = SERVO_REGISTER_PRESENT_SPEED;
+        servoPckt[6] = _NUM_OF_BYTES_TO_READ;
+        checkSumAndPushToQueue(&servoPckt[0]);
+    }
+}
+
+void servoWriteConstructor(Vector<int>* velArray) {
+    uint8_t servoPckt[8]{0};
+    int val = 0;
+    for (size_t id = 1; id <= 2; id++) {
+        servoPckt[0] = FF;
+        servoPckt[1] = FF;
+        servoPckt[2] = id;
+        servoPckt[3] = _LENGHT;
+        servoPckt[4] = _WRITE_SERVO_DATA;
+        val = velArray->at(id);
+        if (val < 0) {
+            val *= (-1);
+            val += 1024;
+        }
+        servoPckt[5] = val & 255;
+        servoPckt[6] = val >> 8;
+        velArray->clear();
+        checkSumAndPushToQueue(&servoPckt[0]);
+    }
+}
+
+void jsonParser() {
+    Vector<int> velVec;
+    StaticJsonBuffer<200> jsonBuffer;
+    String s = getServoVel();
+    JsonObject& root = jsonBuffer.parseObject(s);
+    velVec[1] = root["velLeft"];
+    velVec[2] = root["velRight"];
+    servoWriteConstructor(&velVec);
+}
+
+void jsonSensorConstructor() {
+    StaticJsonBuffer<bufLen> jsonBuffer;
     JsonObject& root = jsonBuffer.createObject();
+    int sensorData[5][8] = {0};
+    
+    root["data"] = "sensor";
+    JsonArray& sensorF = root.createNestedArray("F");
+    JsonArray& sensorR = root.createNestedArray("R");
+    JsonArray& sensorL = root.createNestedArray("L");
+    JsonArray& sensorB = root.createNestedArray("B");
+    for (size_t i = 0; i < 5; i++) {
+        for (size_t j = 0; j < 8; j++) {
+            sensorData[i][j] = getSensorData(i, j);
+
+        }
+    }
+    for (size_t i = 0; i <= 2; i++) {
+        for (int j = 0; j < 8; j++) {
+            sensorF.add(sensorData[i][j]);
+            sensorL.add(sensorData[4][i]);
+            sensorB.add(sensorData[3][i]);
+            sensorR.add(sensorData[2][i]);
+        }
+    }
+    root.printTo(Serial);
 
 }
 
-void dynaPacketConstructor() {
+void jsonServoConstructor(int op, int* dataArray) {
+    StaticJsonBuffer<bufLen> jsonBuffer;
+    JsonObject& root = jsonBuffer.createObject();
 
+    root["data"] = "servo";
+    root["velLeft"] = dataArray[0];
+    root["velRight"] = dataArray[1];
+    root.printTo(Serial);
 }
 
 void requestHandler() {
@@ -199,38 +391,26 @@ void requestHandler() {
         incomingByte = Serial.read();
         switch (incomingByte) {
             case sensorReadByte:
-                jsonConstructor(sensorRead);
+                jsonSensorConstructor();
+                break;
             case servoReadByte:
-                jsonConstructor(servoRead);
+                //jsonConstructor(_READ_SERVO_DATA);
+                break;
             case servoWrite:
-                dynaPacketConstructor();
+                getServoVel();
+
+                break;
         }
     }
 }
 
-char readJsonString() {
-    StaticJsonBuffer<200> jsonBuffer;
-    char buf[200], c;
-    int index = 0;
-    do {
-        c = Serial.read();
-        buf[index]=c;
-        index++;
-        delay(100);
 
-        Serial.println(c);
-    } while(c!='}');
-    buf[index]='\0';
-    JsonObject& root = jsonBuffer.parseObject(buf);
-    int data = root["servoData"][0];
-    return 0;
-}
 
 void loop() {
     //StaticJsonBuffer<500> jsonBuffer;
     //JsonObject& root = jsonBuffer.createObject();
-    delay(300);
-    readJsonString();
+    requestHandler();
+    //getServoVel();
 
         /*switch (incomingByte) {
             case sensorRead:
@@ -419,6 +599,8 @@ void noMessageReceival( UartEvent*          event,
     }
 }
 
+
+
 void noMessageReceival1(){
   noMessageReceival(&event1, &txTimer1, &resendCounter1,send1, &messageVector1);
 }
@@ -461,6 +643,7 @@ void rxEvent( UartEvent*          event,
               volatile uint8_t*   resendCounter,
               void (*rxResyncFunctionPointer)(void),
               void(*sendFunctionPointer)(void)){
+                  Vector<int> readVel;
   if ((*sync) == true){
     if ((*posInArray) >= 4){
       (*numOfBytesToRead) = rcvdPkt[3] +4;
@@ -474,19 +657,6 @@ void rxEvent( UartEvent*          event,
 
     if ((*posInArray) > 4 && (*posInArray) >= rcvdPkt[3] + 4){//received a complete packet from Dynamixel
       timer->end();
-     // Serial.print("Received a Message from :");
-      //Serial.println(rcvdPkt[2]);
-      //Serial.println("Packet is:");
-          //digitalWrite(ledPin, HIGH);
-          //if (rcvdPkt[4]==2 && rcvdPkt[5]==38) {
-
-
-
-              //digitalWrite(ledPin, LOW);
-          //}
-      //for(int i =0;i<rcvdPkt[3]+4;i++){
-        //Serial.println(rcvdPkt[i]);
-      //}
       *resendCounter=0;
 
       uint8_t testchksum=0;
@@ -509,14 +679,12 @@ void rxEvent( UartEvent*          event,
          // Serial.println(rcvdPkt[i]);
         }
       }
-      if (rcvdPkt[2]==1) {
-          velLeft[0]=rcvdPkt[5];
-          velLeft[1]=rcvdPkt[6];
+      readVel.push_back(rcvdPkt[2]);
+      readVel.push_back(rcvdPkt[5]);
+      readVel.push_back(rcvdPkt[6]);
+      if (readVel[0] != 0) {
+          readVelFromPckt(&readVel);
       }
-        if (rcvdPkt[2]==2) {
-            velRight[0]=rcvdPkt[5];
-            velRight[1]=rcvdPkt[6];
-        }
 
       /*Serial.println(pcktSegStrt);
           Serial.println(rcvdPkt[5]);
