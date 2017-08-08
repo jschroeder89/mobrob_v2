@@ -20,11 +20,12 @@
 
 //Prototypes
 int openPort(char const *port);
-std::string readPort(int fd);
-int teensyRequest(int fd, int op);
-std::vector<int> jsonParser(std::string s);
-void setVelocity(int fd, int velLeft, int velRight);
-
+std::string readFromUSB(int fd);
+int requestHandler(int fd, int op);
+void convertVelocitiesToJson(int fd, int velLeft, int velRight);
+void writeToUSB(int fd, JsonObject& root);
+void setVelocities(int fd, int velLeft, int velRight);
+std::vector<std::vector<int>> jsonSensorParser(std::string json);
 
 int openPort(char const *port) {
     int fd;
@@ -48,7 +49,7 @@ int openPort(char const *port) {
     return fd;
 }
 
-int teensyRequest(int fd, int op) {
+int requestHander(int fd, int op) {
     char byte;
 
     switch (op) {
@@ -66,7 +67,7 @@ int teensyRequest(int fd, int op) {
     return 0;
 }
 
-std::string readPort(int fd) {
+std::string readFromUSB(int fd) {
     std::string s;
     char buf[bufLen];
     int n = 0, nbytes = 0;
@@ -95,21 +96,21 @@ std::string readPort(int fd) {
     return s;
 }
 
-std::vector<std::vector<int> >jsonSensorParser(std::string json) {
+std::vector<std::vector<int>> jsonSensorParser(std::string json) {
     StaticJsonBuffer<jsonBufLen> jsonBuffer;
     JsonObject& root = jsonBuffer.parseObject(json);
-    std::vector<int> FL, L, R, B;
+    std::vector<int> F, L, R, B;
     std::vector<std::vector<int> > sensorData;
 
     for (size_t i = 0; i < 16; i++) {
-        FL.push_back(root["FL"][i]);
+        F.push_back(root["F"][i]);
     }
     for (size_t i = 0; i < 8; i++) {
         L.push_back(root["L"][i]);
         B.push_back(root["B"][i]);
         R.push_back(root["R"][i]);
     }
-    sensorData.push_back(FL);
+    sensorData.push_back(F);
     sensorData.push_back(L);
     sensorData.push_back(B);
     sensorData.push_back(R);
@@ -128,15 +129,8 @@ std::vector<int> jsonServoParser(std::string json) {
     return servoData;
 }
 
-void setVelocity(int fd, int velLeft, int velRight) {
-    StaticJsonBuffer<bufLen> jsonBuffer;
-    JsonObject& root = jsonBuffer.createObject();
+void writeToUSB(int fd, JsonObject& root) {
     char buffer[bufLen];
-
-    root["data"] = "servoVels";
-    root["velLeft"] = velLeft;
-    root["velRight"] = velRight;
-
     root.printTo(buffer, sizeof buffer);
     int n = write(fd, &buffer, sizeof buffer);
     if (n > 0) {
@@ -144,13 +138,28 @@ void setVelocity(int fd, int velLeft, int velRight) {
     }
 }
 
+void setVelocities(int fd, int velLeft, int velRight) {
+    convertVelocitiesToJson(fd, velLeft, velRight);
+}
+
+void convertVelocitiesToJson(int fd, int velLeft, int velRight) {
+    StaticJsonBuffer<jsonBufLen> jsonBuffer;
+    JsonObject& root = jsonBuffer.createObject();
+
+    root["data"] = "servoVels";
+    root["velLeft"] = velLeft;
+    root["velRight"] = velRight;
+
+    writeToUSB(fd, root);
+}
+
 int main(int argc, char *argv[]) {
   int fd = 0;
   std::string s;
 
   fd = openPort("/dev/ttyACM0");
-  teensyRequest(fd, servoWrite);
-  setVelocity(fd, 50, 50);
+  requestHandler(fd, servoWrite);
+  setVelocities(fd, 50, 50);
   //jsonParser(readPort(fd));
   return 0;
 }

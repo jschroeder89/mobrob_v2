@@ -3,6 +3,7 @@
 
 #include <cstdint>
 #include <Vector.h>
+#include <QueueArray.h>
 
 #define _READ_SERVO_DATA 0X02
 #define _WRITE_SERVO_DATA 0X03
@@ -108,4 +109,6 @@ class DynamixelMessage
         uint8_t _value;
         uint8_t _payload[64];
 };
+
+
 #endif

@@ -3,7 +3,6 @@
 #include <QueueArray.h>
 #include <Arduino.h>
 #include <i2c_t3.h>
-#include <time.h>
 #include <string>
 #include <vector>
 #include <cstdint>
@@ -34,29 +33,24 @@
 #define sensorReadByte '1'
 #define servoReadByte '2'
 #define servoWriteByte '3'
-#define acknowledgeSize 'a'
 
 #define FF 255
 #define _LENGHT 5
 #define _NUM_OF_BYTES_TO_READ 2
+#define NumOfSensors 5
+#define lenPos 3
+#define lenConst 2
 
 #define sensorRead 1
 #define servoRead 2
 #define servoWrite 3
 #define bufLen 512
+#define jsonBufLen 256
 //Arrays
-uint8_t segments[5] = {1,2,3,4,5};
-char sgmnts[5]= {'A','B','C','D','E'};
-char velLeftChars[2]={'L','N'};
-char velRightChars[2]={'R','N'};
 uint8_t address[] = {AD0, AD1, AD2, AD3, AD4};
 uint8_t channel[] = {CH0, CH1, CH2, CH3, CH4, CH5, CH6, CH7};
-int data[5][8];
-int ledPin=13;
-int velLeft[2]={0};
-int velRight[2]={0};
-char incomingByte;
-boolean newData = false;
+
+//boolean newData = false;
 
 Uart1Event event1;//initialize UART A of the Teensy for enhanced features like DMA capability
 Uart2Event event2;//initialize UART B ""
@@ -101,15 +95,11 @@ volatile uint8_t resendCounter3=0;
 
 volatile bool usbMode=false;
 
-volatile bool scanMode=false;           //if scanMode is set to true, the servos that are connected
                                         //will be memorized in the idMap. scanMode is being set
                                         //in the scanPort function automatically
-
-
 uint8_t rcvdPktUsb[MAX_LENGTH_OF_MESSAGE];
 uint8_t posInArrayUsb=0;
 
-volatile uint8_t idMap[256];
 
 void rxEvent1();              //interrupt functions for the input buffer on the UART ports
 void rxEvent2();
@@ -138,15 +128,68 @@ void pushToQueue2(DynamixelMessage* messageToPush);
 void pushToQueue3(DynamixelMessage* messageToPush);
 void scanPort();
 
-void requestHandler();
-void jsonServoConstructor(int* dataArray);
-void jsonSensorConstructor();
-void jsonParser();
-void servoWriteConstructor(uint8_t* servoPckt);
-void servoReadConstructor(int* servoPckt);
-void readVelFromPckt(Vector<int>* servoPckt);
-void checkSumAndPush();
-String getServoVel();
+void readSensorData();
+void writeToUSB(JsonObject& root);
+void convertSensorDataToJson();
+void convertServoDataToJson(int* dataArray);
+void parseJsonString(String s);
+void servoWritePcktConstructor(uint8_t* servoPckt);
+void servoReadPcktConstructor(int* servoPckt);
+void writeToUART();
+void convertVelocities(Vector<int>* servoPckt);
+void readStatusPckt(uint8_t* rcvdPkt);
+void readFromUSB();
+
+class scanIDs {
+    public:
+        volatile uint8_t idMap[256];
+        void scanPort();
+        volatile bool scanMode=false;
+};
+
+void scanIDs::scanPort() {
+    scanMode = true;
+
+    for (int i=0;i<254;i++){
+        idMap[i]=0;
+    }
+    uint8_t search[16];
+    for(int i=0;i<16;i++)
+    {
+        search[i]=0;
+    }
+
+    for(int k=0;k<8;k++){
+        for (int j=32*k;j<32*(k+1);j++){
+            search[0]=255;
+            search[1]=255;
+            search[2]=j;
+            search[3]=4;
+            search[4]=2;
+            search[5]=3;
+            search[6]=1;
+            DynamixelMessage* ScanMessage1= new DynamixelMessage(search); //messages are being generated and put
+            DynamixelMessage* ScanMessage2= new DynamixelMessage(search); //
+            DynamixelMessage* ScanMessage3= new DynamixelMessage(search); //
+
+
+            queue1.push(ScanMessage1);                                                   //messages are being pushed
+            queue2.push(ScanMessage2);                                                   //into their corresponding queues
+            queue3.push(ScanMessage3);
+
+        }
+
+        send1();
+        send2();
+        send3();
+        while(busy1 && busy2 && busy3){
+            delay(10);                                                                  //Waiting for ports to finish writing all messages
+        }
+
+        scanMode=false;
+    }
+
+}
 
 void setup(){
   Wire.begin(I2C_MASTER, 0x00, I2C_PINS_18_19, I2C_PULLUP_EXT, I2C_RATE_400);
@@ -172,13 +215,15 @@ void setup(){
 
   digitalWrite(13, HIGH);
   delay(4000);
-  scanPort();
+  scanIDs portInit;
+  portInit.scanPort();
+  //scanPort();
   delay(2000);
   digitalWrite(13, LOW);
 }
 
 
-int getSensorData(int add, int ch)
+int getI2CSensorData(int add, int ch)
 {
   Wire.beginTransmission(address[add]);     // slave addr
   Wire.write(channel[ch]);
@@ -197,9 +242,10 @@ int getSensorData(int add, int ch)
   return -1;
 }
 
-String getServoVel() {
+void readFromUSB() {
     static byte idx = 0;
     static boolean inProgress = false;
+    static boolean newData = false;
     char  c;
     char buf[bufLen];
     String s;
@@ -235,36 +281,34 @@ String getServoVel() {
     s = buf;
     s.append('}');
     //Serial.println(s);
-    return s;
+    parseJsonString(s);
 }
 
-void checkSumAndPushToQueue(uint8_t* servoPckt) {
-    size_t checkSum = 0, checkSumPos = 0, len = 0;
-
-    len = servoPckt[3] + 2;
-    checkSumPos =  len + 1;
-        for (size_t i = 2; i <= len; i++) {
-            checkSum += servoPckt[i];
-        }
-    checkSum = ~(checkSum) & 255;
-    servoPckt[checkSumPos] = checkSum;
+void writeToUART(uint8_t* servoPckt) {
+    scanIDs portInit;
     DynamixelMessage* USBMessage = new DynamixelMessage(servoPckt);
 
-    if (idMap[servoPckt[2]] == 1 || scanMode) {
+    if (portInit.idMap[servoPckt[2]] == 1 || portInit.scanMode) {
         pushToQueue1(USBMessage);
     }
-    else if (idMap[servoPckt[2]] == 2 || scanMode) {
+    else if (portInit.idMap[servoPckt[2]] == 2 || portInit.scanMode) {
         pushToQueue2(USBMessage);
     }
-    else if (idMap[servoPckt[2]] == 3 || scanMode) {
+    else if (portInit.idMap[servoPckt[2]] == 3 || portInit.scanMode) {
         pushToQueue3(USBMessage);
     }
-    else if (idMap[servoPckt[2]] == 0) {
+    else if (portInit.idMap[servoPckt[2]] == 0) {
         delete USBMessage;
     }
 }
 
-void readVelFromPckt(Vector<int>* servoPckt) {
+void readStatusPckt(Vector<int>* statusPckt) {
+    if (statusPckt->at(0) != 0) {
+        convertVelocities(statusPckt);
+    }
+}
+
+void convertVelocities(Vector<int>* servoPckt) {
     int lowByte = 0, highByte = 0;
     static int velLeft, velRight;
     static boolean velLeftNotEmpty;
@@ -293,18 +337,20 @@ void readVelFromPckt(Vector<int>* servoPckt) {
         }
     }
     if (velLeftNotEmpty && velRightNotEmpty == false) {
-        int velArray[2]{0};
+        int velArray[2] = {0};
         velArray[0] = velLeft;
         velArray[1] = velRight;
         velLeft = 0, velRight = 0;
         velLeftNotEmpty = true;
         velRightNotEmpty = true;
-        jsonServoConstructor(&velArray[0]);
+
+        convertServoDataToJson(&velArray[0]);
     }
 }
 
-void servoReadConstructor() {
+void servoReadPcktConstructor() {
     uint8_t servoPckt[8]{0};
+    size_t checkSum = 0, checkSumPos = 0, len = 0;
     for (size_t id = 1; id <=2; id++) {
         servoPckt[0] = FF;
         servoPckt[1] = FF;
@@ -313,12 +359,21 @@ void servoReadConstructor() {
         servoPckt[4] = _READ_SERVO_DATA;
         servoPckt[5] = SERVO_REGISTER_PRESENT_SPEED;
         servoPckt[6] = _NUM_OF_BYTES_TO_READ;
-        checkSumAndPushToQueue(&servoPckt[0]);
+        len = servoPckt[lenPos] + lenConst;
+        //checkSumPos =  len + 1;
+            for (size_t i = 2; i < len; i++) {
+                checkSum += servoPckt[i];
+            }
+        checkSum = ~(checkSum) & 255;
+        servoPckt[7] = checkSum;
+
+        writeToUART(&servoPckt[0]);
     }
 }
 
-void servoWriteConstructor(Vector<int>* velArray) {
+void servoWritePcktConstructor(Vector<int>* velArray) {
     uint8_t servoPckt[8]{0};
+    size_t checkSum = 0, checkSumPos = 0, len = 0;
     int val = 0;
     for (size_t id = 1; id <= 2; id++) {
         servoPckt[0] = FF;
@@ -333,148 +388,172 @@ void servoWriteConstructor(Vector<int>* velArray) {
         }
         servoPckt[5] = val & 255;
         servoPckt[6] = val >> 8;
+        len = servoPckt[lenPos] + lenConst;
+        //checkSumPos =  len + 1;
+            for (size_t i = 2; i < len; i++) {
+                checkSum += servoPckt[i];
+            }
+        checkSum = ~(checkSum) & 255;
+        servoPckt[7] = checkSum;
         velArray->clear();
-        checkSumAndPushToQueue(&servoPckt[0]);
+
+        writeToUART(&servoPckt[0]);
     }
 }
 
-void jsonParser() {
+void parseJsonString(String s) {
     Vector<int> velVec;
-    StaticJsonBuffer<200> jsonBuffer;
-    String s = getServoVel();
+    StaticJsonBuffer<jsonBufLen> jsonBuffer;
+
     JsonObject& root = jsonBuffer.parseObject(s);
-    velVec[1] = root["velLeft"];
-    velVec[2] = root["velRight"];
-    servoWriteConstructor(&velVec);
+    velVec.push_back(root["velLeft"]);
+    velVec.push_back(root["velRight"]);
+
+    servoWritePcktConstructor(&velVec);
 }
 
-void jsonSensorConstructor() {
-    StaticJsonBuffer<bufLen> jsonBuffer;
-    JsonObject& root = jsonBuffer.createObject();
-    int sensorData[5][8] = {0};
-
-    root["data"] = "sensor";
-    JsonArray& sensorF = root.createNestedArray("F");
-    JsonArray& sensorR = root.createNestedArray("R");
-    JsonArray& sensorL = root.createNestedArray("L");
-    JsonArray& sensorB = root.createNestedArray("B");
-    for (size_t i = 0; i < 5; i++) {
-        for (size_t j = 0; j < 8; j++) {
-            sensorData[i][j] = getSensorData(i, j);
-
-        }
-    }
-    for (size_t i = 0; i <= 2; i++) {
-        for (int j = 0; j < 8; j++) {
-            sensorF.add(sensorData[j][i]);
-            sensorL.add(sensorData[4][i]);
-            sensorB.add(sensorData[3][i]);
-            sensorR.add(sensorData[2][i]);
-        }
-    }
-    root.printTo(Serial);
-
-}
-
-void jsonServoConstructor(int op, int* dataArray) {
-    StaticJsonBuffer<bufLen> jsonBuffer;
+void convertServoDataToJson(int* dataArray) {
+    StaticJsonBuffer<jsonBufLen> jsonBuffer;
     JsonObject& root = jsonBuffer.createObject();
 
     root["data"] = "servo";
     root["velLeft"] = dataArray[0];
     root["velRight"] = dataArray[1];
+    writeToUSB(root);
+}
+
+void writeToUSB(JsonObject& root) {
     root.printTo(Serial);
 }
 
-void requestHandler() {
-    if (Serial.available() > 0) {
-        incomingByte = Serial.read();
-        switch (incomingByte) {
-            case sensorReadByte:
-                jsonSensorConstructor();
-                break;
-            case servoReadByte:
-                //jsonConstructor(_READ_SERVO_DATA);
-                break;
-            case servoWrite:
-                getServoVel();
-
-                break;
+void convertSensorDataToJson(int sensorData[][8]) {
+    StaticJsonBuffer<bufLen> jsonBuffer;
+    JsonObject& root = jsonBuffer.createObject();
+    root["data"] = "sensor";
+    JsonArray& sensorFront = root.createNestedArray("F");
+    JsonArray& sensorRight = root.createNestedArray("R");
+    JsonArray& sensorLeft = root.createNestedArray("L");
+    JsonArray& sensorBack = root.createNestedArray("B");
+    for (size_t i = 0; i <= 2; i++) {
+        for (int j = 0; j < 8; j++) {
+            sensorFront.add(sensorData[i][j]);
+            sensorLeft.add(sensorData[4][j]);
+            sensorBack.add(sensorData[3][j]);
+            sensorRight.add(sensorData[2][j]);
         }
     }
+    writeToUSB(root);
 }
 
-
+void readSensorData() {
+    int sensorData[5][8] = {0};
+    for (size_t i = 0; i < 2; i++) {
+        for (size_t j = 0; j < 8; j++) {
+            sensorData[i][j] = getI2CSensorData(i, j);
+            //front.push_back(getI2CSensorData(i, j));
+        }
+    }
+    for (size_t i = 0; i < 8; i++) {
+        sensorData[4][i] = getI2CSensorData(4, i);
+        sensorData[3][i] = getI2CSensorData(3, i);
+        sensorData[2][i] = getI2CSensorData(2, i);
+    }
+    convertSensorDataToJson(sensorData);
+}
 
 void loop() {
-    //StaticJsonBuffer<500> jsonBuffer;
-    //JsonObject& root = jsonBuffer.createObject();
-    requestHandler();
-    //getServoVel();
-
-        /*switch (incomingByte) {
-            case sensorRead:
-            if (Serial.availableForWrite() > 0) {
-                root["data"] = "sensor";
-                JsonArray& sensorF = root.createNestedArray("F");
-                JsonArray& sensorR = root.createNestedArray("R");
-                JsonArray& sensorL = root.createNestedArray("L");
-                JsonArray& sensorB = root.createNestedArray("B");
-                sensorF.add(4095);
-                sensorF.add(1204);
-                sensorL.add(3230);
-                sensorR.add(2383);
-                sensorB.add(2383);
-                root.printTo(Serial);
-
-            }
+    if (Serial.available() > 0) {
+        char requestByte = Serial.read();
+        switch (requestByte) {
+            case sensorReadByte:
+                readSensorData();
                 break;
-                case servoRead:Serial.println(incomingByte);
-                    break;
-                    case servoWrite:Serial.println(incomingByte);
-                        break;
-        }*/
-
-
-    /*while (Serial.availableForWrite()>0) {
-        delay(100);
-        Serial.write("{test}");
-        delay(100);
-
-    }*/
-  //rxSerialEventUsb();
-  //uint8_t i = 8;
-  //uint8_t u = 1;
-  //digitalWrite(ledPin, HIGH);
-  //delay(50);
-    /*for ( i = 0; i < sizeof(segments); i++) {
-            Serial.println(sgmnts[i]);
-        for ( j = 0; j < sizeof(channel); j++)  {
-            data[i][j] = getSensorData(i,j);
-            Serial.println(data[i][j]);
+            case servoReadByte:
+                servoReadPcktConstructor();
+                break;
+            case servoWrite:
+                readFromUSB();
+                break;
         }
     }
-    Serial.println(velLeftChars[0]);
-    for (int i = 0; i < 2; i++) {
-        Serial.println(velLeft[i]);
-    }
-    Serial.println(velLeftChars[1]);
-
-    Serial.println(velRightChars[0]);
-    for (int i = 0; i < 2; i++) {
-        Serial.println(velRight[i]);
-    }
-    Serial.println(velRightChars[1]);
-    */
-
-    //Serial.println("test");
-
-
 }
+
+
+/*void rxSerialEventUsb(){
+ posInArrayUsb=0;
+ if (!Serial.available()){
+   return;
+ }
+ while(Serial.available()){
+
+   if(posInArrayUsb==0){
+     rcvdPktUsb[posInArrayUsb]=Serial.read();
+     posInArrayUsb++;
+   }
+   if(posInArrayUsb>=3){
+     if(rcvdPktUsb[0] == 255 && rcvdPktUsb[1] == 255){
+       while(posInArrayUsb<rcvdPktUsb[3]+4){
+         rcvdPktUsb[posInArrayUsb]=Serial.read();
+         posInArrayUsb++;
+       }
+         if ((posInArrayUsb)==(rcvdPktUsb[3]+4)){
+         uint8_t testchksum=0;
+         for(int p=2;p<=rcvdPktUsb[3]+2;p++){                 //checksum test for message from USB
+             testchksum=testchksum+rcvdPktUsb[p];
+         }
+         testchksum=~(testchksum)&255;
+         if(testchksum!=rcvdPktUsb[posInArrayUsb-1]){
+         }else if(testchksum==rcvdPktUsb[posInArrayUsb-1]){//Message seems to look good.Creation of Dynamixel Object and putting into Queue
+           //Serial.println("Checksum correct, creating message object");
+           DynamixelMessage* USBMessage=new DynamixelMessage(rcvdPktUsb);
+           if(!USBMessage){
+               return;
+           }
+           for(int i=0;i<=posInArrayUsb;i++)
+           {
+            // Serial.print(i);
+            // Serial.print(": ");
+            // Serial.println(rcvdPktUsb[i]);
+           }
+
+           if (idMap[rcvdPktUsb[2]] == 1 || scanMode){
+             pushToQueue1(USBMessage);
+           }else if(idMap[rcvdPktUsb[2]] == 2 || scanMode){
+             pushToQueue2(USBMessage);
+           }else if(idMap[rcvdPktUsb[2]] == 3 || scanMode){
+             pushToQueue3(USBMessage);
+           }else if(idMap[rcvdPktUsb[2]] == 0){
+             //Serial.println("Could not find this Servo!");
+             delete USBMessage;
+           }
+           posInArrayUsb=0;
+           for(int i=0;i<MAX_LENGTH_OF_MESSAGE;i++)
+           {
+             rcvdPktUsb[i]=0;
+           }
+         }
+       }
+     }
+   }else{
+     if(posInArrayUsb<3){
+       rcvdPktUsb[posInArrayUsb]=Serial.read();
+       posInArrayUsb++;
+       if(rcvdPktUsb[0] == 255 && rcvdPktUsb[1] == 255){//Found Packet prefix, trying to retreive ID+Length
+         rcvdPktUsb[posInArrayUsb]=Serial.read();
+         posInArrayUsb++;
+         rcvdPktUsb[posInArrayUsb]=Serial.read();
+         posInArrayUsb++;
+       }
+     }
+   }
+ }
+}
+
 
 void scanPort(){
 
-  scanMode=true;
+    scanMode = true;
+
   for (int i=0;i<254;i++){
     idMap[i]=0;
   }
@@ -513,76 +592,7 @@ void scanPort(){
 
   scanMode=false;
 }
-}
-void rxSerialEventUsb(){
-  posInArrayUsb=0;
-  if (!Serial.available()){
-    return;
-  }
-  while(Serial.available()){
-
-    if(posInArrayUsb==0){
-      rcvdPktUsb[posInArrayUsb]=Serial.read();
-      posInArrayUsb++;
-    }
-    if(posInArrayUsb>=3){
-      if(rcvdPktUsb[0] == 255 && rcvdPktUsb[1] == 255){
-        while(posInArrayUsb<rcvdPktUsb[3]+4){
-          rcvdPktUsb[posInArrayUsb]=Serial.read();
-          posInArrayUsb++;
-        }
-          if ((posInArrayUsb)==(rcvdPktUsb[3]+4)){
-          uint8_t testchksum=0;
-          for(int p=2;p<=rcvdPktUsb[3]+2;p++){                 //checksum test for message from USB
-              testchksum=testchksum+rcvdPktUsb[p];
-          }
-          testchksum=~(testchksum)&255;
-          if(testchksum!=rcvdPktUsb[posInArrayUsb-1]){
-          }else if(testchksum==rcvdPktUsb[posInArrayUsb-1]){//Message seems to look good.Creation of Dynamixel Object and putting into Queue
-            //Serial.println("Checksum correct, creating message object");
-            DynamixelMessage* USBMessage=new DynamixelMessage(rcvdPktUsb);
-            if(!USBMessage){
-                return;
-            }
-            for(int i=0;i<=posInArrayUsb;i++)
-            {
-             // Serial.print(i);
-             // Serial.print(": ");
-             // Serial.println(rcvdPktUsb[i]);
-            }
-
-            if (idMap[rcvdPktUsb[2]] == 1 || scanMode){
-              pushToQueue1(USBMessage);
-            }else if(idMap[rcvdPktUsb[2]] == 2 || scanMode){
-              pushToQueue2(USBMessage);
-            }else if(idMap[rcvdPktUsb[2]] == 3 || scanMode){
-              pushToQueue3(USBMessage);
-            }else if(idMap[rcvdPktUsb[2]] == 0){
-              //Serial.println("Could not find this Servo!");
-              delete USBMessage;
-            }
-            posInArrayUsb=0;
-            for(int i=0;i<MAX_LENGTH_OF_MESSAGE;i++)
-            {
-              rcvdPktUsb[i]=0;
-            }
-          }
-        }
-      }
-    }else{
-      if(posInArrayUsb<3){
-        rcvdPktUsb[posInArrayUsb]=Serial.read();
-        posInArrayUsb++;
-        if(rcvdPktUsb[0] == 255 && rcvdPktUsb[1] == 255){//Found Packet prefix, trying to retreive ID+Length
-          rcvdPktUsb[posInArrayUsb]=Serial.read();
-          posInArrayUsb++;
-          rcvdPktUsb[posInArrayUsb]=Serial.read();
-          posInArrayUsb++;
-        }
-      }
-    }
-  }
-}
+}*/
 
 void noMessageReceival( UartEvent*          event,
                         IntervalTimer*      timer,
@@ -643,7 +653,8 @@ void rxEvent( UartEvent*          event,
               volatile uint8_t*   resendCounter,
               void (*rxResyncFunctionPointer)(void),
               void(*sendFunctionPointer)(void)){
-                  Vector<int> readVel;
+                  scanIDs portInit;
+                  Vector<int> statusPckt;
   if ((*sync) == true){
     if ((*posInArray) >= 4){
       (*numOfBytesToRead) = rcvdPkt[3] +4;
@@ -671,25 +682,19 @@ void rxEvent( UartEvent*          event,
         event->setRxBufferSizeTrigger(1);
       }
       //Serial.println("Correct checksum from Servo");
-      if(scanMode){
-        idMap[rcvdPkt[2]]=uartInt;
+      if(portInit.scanMode){
+        portInit.idMap[rcvdPkt[2]]=uartInt;
       }else if (usbMode){
         //Serial.println("Sending back this Message to USB :");
         for (int i=0;i<(*posInArray);i++){
          // Serial.println(rcvdPkt[i]);
         }
       }
-      readVel.push_back(rcvdPkt[2]);
-      readVel.push_back(rcvdPkt[5]);
-      readVel.push_back(rcvdPkt[6]);
-      if (readVel[0] != 0) {
-          readVelFromPckt(&readVel);
-      }
+      statusPckt.push_back(rcvdPkt[5]);
+      statusPckt.push_back(rcvdPkt[2]);
+      statusPckt.push_back(rcvdPkt[6]);
+      readStatusPckt(&statusPckt);
 
-      /*Serial.println(pcktSegStrt);
-          Serial.println(rcvdPkt[5]);
-          Serial.println(rcvdPkt[6]);
-      Serial.println(pcktSegEnd );*/
       event->setRxBufferSizeTrigger(4);
       (*posInArray) = 0;
       sendFunctionPointer();

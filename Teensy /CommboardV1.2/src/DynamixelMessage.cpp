@@ -50,6 +50,7 @@ void DynamixelMessage::assemblePacketfromArray(Vector<uint8_t>* assembledPacket)
   assembledPacket->push_back(checksumResult);
 
 }
+
 void DynamixelMessage::assemblePacket(Vector<uint8_t>* assembledPacket)
 //This function will assemble a packet correctly so that it can be pushed to the queue, and sent to a Dynamixel Servo-Drive.
 //The function will use the private variables that were given when calling the constructor
