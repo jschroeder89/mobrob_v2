@@ -58,7 +58,7 @@ class DynamixelController {
 
         void convertServoDataToJson(int* dataArray);
         void parseJsonString(String s);
-        void servoWritePcktConstructor(uint8_t* servoPckt);
+        void servoWritePcktConstructor(Vector<int>* velArray);
         void servoReadPcktConstructor(int* servoPckt);
         void writeToUART();
         void convertVelocities(Vector<int>* servoPckt);
@@ -74,10 +74,11 @@ class DynamixelController {
         IntervalTimer txTimer1;
         IntervalTimer txTimer2;
         IntervalTimer txTimer3;
-
-        QueueArray <DynamixelMessage*> queue1(uint16_t size = 50);
-        QueueArray <DynamixelMessage*> queue2(uint16_t size = 50);
-        QueueArray <DynamixelMessage*> queue3(uint16_t size = 50);
+        
+        uint16_t size = 50;
+        QueueArray <DynamixelMessage*> queue1{size};
+        QueueArray <DynamixelMessage*> queue2{size};
+        QueueArray <DynamixelMessage*> queue3{size};
 
         volatile uint8_t rcvdPkt1[MAX_LENGTH_OF_MESSAGE];
         volatile uint8_t rcvdPkt2[MAX_LENGTH_OF_MESSAGE];
@@ -115,8 +116,5 @@ class DynamixelController {
         volatile uint8_t idMap[256];
         volatile bool scanMode = false;
 };
-
-
-
 
 #endif

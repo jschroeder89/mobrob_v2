@@ -52,22 +52,21 @@ uint8_t channel[] = {CH0, CH1, CH2, CH3, CH4, CH5, CH6, CH7};
 
 //boolean newData = false;
 
-Uart1Event event1;//initialize UART A of the Teensy for enhanced features like DMA capability
+/*Uart1Event event1;//initialize UART A of the Teensy for enhanced features like DMA capability
 Uart2Event event2;//initialize UART B ""
-Uart3Event event3;//initialize UART C ""
+Uart3Event event3;//initialize UART C ""*/
 
-IntervalTimer txTimer1;
+/*IntervalTimer txTimer1;
 IntervalTimer txTimer2;
-IntervalTimer txTimer3;
+IntervalTimer txTimer3;*/
 
-QueueArray <DynamixelMessage*> queue1(50);              //queues for the individual ports to hold the messages
+/*QueueArray <DynamixelMessage*> queue1(50);              //queues for the individual ports to hold the messages
 QueueArray <DynamixelMessage*> queue2(50);              //
-QueueArray <DynamixelMessage*> queue3(50);              //
+QueueArray <DynamixelMessage*> queue3(50);  */            //
 
-#define MAX_LENGTH_OF_MESSAGE 259
-volatile uint8_t rcvdPkt1[MAX_LENGTH_OF_MESSAGE];
+/*volatile uint8_t rcvdPkt1[MAX_LENGTH_OF_MESSAGE];
 volatile uint8_t rcvdPkt2[MAX_LENGTH_OF_MESSAGE];
-volatile uint8_t rcvdPkt3[MAX_LENGTH_OF_MESSAGE];
+volatile uint8_t rcvdPkt3[MAX_LENGTH_OF_MESSAGE];*/
 
 volatile uint16_t posInArray1 = 0;
 volatile uint16_t posInArray2 = 0;
@@ -127,13 +126,14 @@ void pushToQueue1(DynamixelMessage* messageToPush);
 void pushToQueue2(DynamixelMessage* messageToPush);
 void pushToQueue3(DynamixelMessage* messageToPush);
 void scanPort();
+void init();
 
 void readSensorData();
 void writeToUSB(JsonObject& root);
 void convertSensorDataToJson();
 void convertServoDataToJson(int* dataArray);
 void parseJsonString(String s);
-void servoWritePcktConstructor(uint8_t* servoPckt);
+void servoWritePcktConstructor(Vector<int>* velArray);
 void servoReadPcktConstructor(int* servoPckt);
 void writeToUART();
 void convertVelocities(Vector<int>* servoPckt);
@@ -172,6 +172,9 @@ void scanIDs::scanPort() {
             DynamixelMessage* ScanMessage2= new DynamixelMessage(search); //
             DynamixelMessage* ScanMessage3= new DynamixelMessage(search); //
 
+            QueueArray <DynamixelMessage*> queue1(50);
+            QueueArray <DynamixelMessage*> queue2(50);
+            QueueArray <DynamixelMessage*> queue3(50);
 
             queue1.push(ScanMessage1);                                                   //messages are being pushed
             queue2.push(ScanMessage2);                                                   //into their corresponding queues
@@ -191,28 +194,36 @@ void scanIDs::scanPort() {
 
 }
 
+
+
+void init() {
+    Uart1Event event1;//initialize UART A of the Teensy for enhanced features like DMA capability
+    Uart2Event event2;//initialize UART B ""
+    Uart3Event event3;//initialize UART C ""
+
+    event1.txEventHandler = txEvent1;             //defines the function to trigger for sent bytes on Port 1 of the Teensy
+    event1.rxEventHandler = rxEvent1;             //defines the function to trigger for received bytes on Port 1 of the Teensy
+    event1.rxBufferSizeTrigger = 1;               //defines how many bytes have to enter the input buffer until the interrupt triggers the interrupt function
+    event1.begin(1000000);                        //defines the baudrate for the corresponding port
+    event1.clear();                               //clears
+
+    event2.txEventHandler = txEvent2;
+    event2.rxEventHandler = rxEvent2;
+    event2.rxBufferSizeTrigger = 1;
+    event2.begin(1000000);
+    event2.clear();
+
+    event3.txEventHandler = txEvent3;
+    event3.rxEventHandler = rxEvent3;
+    event3.rxBufferSizeTrigger=1;
+    event3.begin(1000000);
+    event3.clear();
+}
+
 void setup(){
   Wire.begin(I2C_MASTER, 0x00, I2C_PINS_18_19, I2C_PULLUP_EXT, I2C_RATE_400);
   Serial.begin(9600);
   pinMode(13, OUTPUT);
-  event1.txEventHandler = txEvent1;             //defines the function to trigger for sent bytes on Port 1 of the Teensy
-  event1.rxEventHandler = rxEvent1;             //defines the function to trigger for received bytes on Port 1 of the Teensy
-  event1.rxBufferSizeTrigger = 1;               //defines how many bytes have to enter the input buffer until the interrupt triggers the interrupt function
-  event1.begin(1000000);                        //defines the baudrate for the corresponding port
-  event1.clear();                               //clears
-
-  event2.txEventHandler = txEvent2;
-  event2.rxEventHandler = rxEvent2;
-  event2.rxBufferSizeTrigger = 1;
-  event2.begin(1000000);
-  event2.clear();
-
-  event3.txEventHandler = txEvent3;
-  event3.rxEventHandler = rxEvent3;
-  event3.rxBufferSizeTrigger=1;
-  event3.begin(1000000);
-  event3.clear();
-
   digitalWrite(13, HIGH);
   delay(4000);
   scanIDs portInit;
@@ -612,14 +623,20 @@ void noMessageReceival( UartEvent*          event,
 
 
 void noMessageReceival1(){
+    Uart1Event event1;
+    IntervalTimer txTimer1;
   noMessageReceival(&event1, &txTimer1, &resendCounter1,send1, &messageVector1);
 }
 
 void noMessageReceival2(){
+    Uart2Event event2;
+    IntervalTimer txTimer2;
     noMessageReceival(&event2, &txTimer2, &resendCounter2,send2, &messageVector2);
 }
 
 void noMessageReceival3(){
+    Uart3Event event3;
+    IntervalTimer txTimer3;
     noMessageReceival(&event3, &txTimer3, &resendCounter3,send3, &messageVector3);
 }
 
@@ -631,14 +648,17 @@ void txEvent( IntervalTimer* timer,                                             
 }
 
 void txEvent1(){
+    IntervalTimer txTimer1;
   txEvent(&txTimer1, noMessageReceival1);
 }
 
 void txEvent2(){
+    IntervalTimer txTimer2;
   txEvent(&txTimer2, noMessageReceival2);
 }
 
 void txEvent3(){
+    IntervalTimer txTimer3;
   txEvent(&txTimer3, noMessageReceival3);
 }
 
@@ -717,14 +737,23 @@ void rxEvent( UartEvent*          event,
 
 
 void rxEvent1(){
+    Uart1Event event1;
+    IntervalTimer txTimer1;
+    volatile uint8_t rcvdPkt1[MAX_LENGTH_OF_MESSAGE];
   rxEvent(&event1, &txTimer1, &sync1, &posInArray1, &numOfBytesToRead1, rcvdPkt1,1,&resendCounter1, rxResync1, send1);
 }
 
 void rxEvent2(){
+    Uart2Event event2;
+    IntervalTimer txTimer2;
+    volatile uint8_t rcvdPkt2[MAX_LENGTH_OF_MESSAGE];
   rxEvent(&event2, &txTimer2, &sync2, &posInArray2, &numOfBytesToRead2, rcvdPkt2,2,&resendCounter2, rxResync2, send2);
 }
 
 void rxEvent3(){
+    Uart3Event event3;
+    IntervalTimer txTimer3;
+    volatile uint8_t rcvdPkt3[MAX_LENGTH_OF_MESSAGE];
   rxEvent(&event3, &txTimer3, &sync3, &posInArray3, &numOfBytesToRead3, rcvdPkt3,3,&resendCounter3, rxResync3, send3);
 }
 
@@ -759,14 +788,20 @@ void rxResync( UartEvent*          event,
 
 
 void rxResync1(){
+    Uart1Event event1;
+    volatile uint8_t rcvdPkt1[MAX_LENGTH_OF_MESSAGE];
   rxResync(&event1, &sync1, &posInArray1, rcvdPkt1, rxEvent1);
 }
 
 void rxResync2(){
+    Uart2Event event2;
+    volatile uint8_t rcvdPkt2[MAX_LENGTH_OF_MESSAGE];
   rxResync(&event2, &sync2, &posInArray2, rcvdPkt2, rxEvent2);
 }
 
 void rxResync3(){
+    Uart3Event event3;
+    volatile uint8_t rcvdPkt3[MAX_LENGTH_OF_MESSAGE];
   rxResync(&event3, &sync3, &posInArray3, rcvdPkt3, rxEvent3);
 }
 
@@ -788,14 +823,20 @@ void send(UartEvent*                      event,
 }
 
 void send1(){
+    Uart1Event event1;
+    QueueArray <DynamixelMessage*> queue1(50);
   send(&event1, &queue1, &resendCounter1,&busy1, &messageVector1);
 }
 
 void send2(){
+    Uart2Event event2;
+    QueueArray <DynamixelMessage*> queue2(50);
   send(&event2, &queue2, &resendCounter2,&busy2, &messageVector2);
 }
 
 void send3(){
+    Uart3Event event3;
+    QueueArray <DynamixelMessage*> queue3(50);
   send(&event3, &queue3, &resendCounter3,&busy3, &messageVector3);
 }
 
@@ -811,13 +852,16 @@ void pushToQueue( QueueArray<DynamixelMessage*>*  queue,
 }
 
 void pushToQueue1(DynamixelMessage* messageToPush){
+    QueueArray <DynamixelMessage*> queue1(50);
     pushToQueue(&queue1,messageToPush,&busy1,send1);
 }
 
 void pushToQueue2(DynamixelMessage* messageToPush){
+    QueueArray <DynamixelMessage*> queue2(50);
     pushToQueue(&queue2,messageToPush,&busy2,send2);
 }
 
 void pushToQueue3(DynamixelMessage* messageToPush){
+    QueueArray <DynamixelMessage*> queue3(50);
     pushToQueue(&queue3,messageToPush,&busy3,send3);
 }

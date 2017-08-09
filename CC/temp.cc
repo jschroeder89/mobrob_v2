@@ -4,7 +4,7 @@
 #include <cstdio>
 #include <unistd.h>
 #include <iostream>
-#include <cstring>
+//#include <cstring>
 #include <vector>
 #include <ArduinoJson.h>
 
@@ -21,14 +21,16 @@
 //Prototypes
 int openPort(char const *port);
 std::string readFromUSB(int fd);
-void requestHandler(int fd, int op);
+int requestHandler(int fd, int op);
 void convertVelocitiesToJson(int fd, int velLeft, int velRight);
-void writeToUSB(int fd, JsonObject& root);
+void writeToUSB(int fd, char* buffer);
 void setVelocities(int fd, int velLeft, int velRight);
 std::vector<std::vector<int> > jsonSensorParser(std::string json);
 
 int openPort(char const *port) {
-    int fd = open(port, O_RDWR | O_NDELAY);
+    int fd;
+
+    fd = open(port, O_RDWR | O_NDELAY);
         if  (fd == -1) {
             perror("Port not found");
             return -1;
@@ -47,7 +49,7 @@ int openPort(char const *port) {
     return fd;
 }
 
-void requestHandler(int fd, int op) {
+int requestHander(int fd, int op) {
     char byte;
 
     switch (op) {
@@ -62,6 +64,7 @@ void requestHandler(int fd, int op) {
                 break;
     }
     write(fd, &byte, sizeof byte);
+    return 0;
 }
 
 std::string readFromUSB(int fd) {
@@ -126,11 +129,8 @@ std::vector<int> jsonServoParser(std::string json) {
     return servoData;
 }
 
-void writeToUSB(int fd, JsonObject& root) {
-    char buffer[bufLen];
-    root.printTo(buffer, sizeof buffer);
+void writeToUSB(int fd, char buffer) {
     int n = write(fd, &buffer, sizeof buffer);
-    std::cout << n << std::endl;
     if (n > 0) {
         std::cout << buffer << std::endl;
     }
@@ -141,21 +141,26 @@ void setVelocities(int fd, int velLeft, int velRight) {
 }
 
 void convertVelocitiesToJson(int fd, int velLeft, int velRight) {
+    char buffer[bufLen];
     StaticJsonBuffer<jsonBufLen> jsonBuffer;
     JsonObject& root = jsonBuffer.createObject();
 
     root["data"] = "servoVels";
     root["velLeft"] = velLeft;
     root["velRight"] = velRight;
+    root.printTo(buffer, sizeof buffer);
 
-    writeToUSB(fd, root);
+
+    writeToUSB(fd, buffer);
 }
 
 int main(int argc, char *argv[]) {
   int fd = 0;
+  std::string s;
+
   fd = openPort("/dev/ttyACM0");
   requestHandler(fd, servoWrite);
-  convertVelocitiesToJson(fd, 500, 50);
+  setVelocities(fd, 50, 50);
   //jsonParser(readPort(fd));
   return 0;
 }

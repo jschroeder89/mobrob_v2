@@ -1,10 +1,11 @@
-#include "DynamixelMessage.h"
+//#include <DynamixelMessage.h>
 #include <Arduino.h>
 #include <string>
 #include <vector>
 #include <cstdint>
 #include <ArduinoJson.h>
 #include "DynamixelController.hpp"
+
 
 void DynamixelController::scanPort() {
     scanMode = true;
@@ -30,7 +31,6 @@ void DynamixelController::scanPort() {
             DynamixelMessage* ScanMessage1= new DynamixelMessage(search); //messages are being generated and put
             DynamixelMessage* ScanMessage2= new DynamixelMessage(search); //
             DynamixelMessage* ScanMessage3= new DynamixelMessage(search); //
-
             queue1.push(ScanMessage1);                                                   //messages are being pushed
             queue2.push(ScanMessage2);                                                   //into their corresponding queues
             queue3.push(ScanMessage3);
@@ -48,7 +48,7 @@ void DynamixelController::scanPort() {
 }
 
 void DynamixelController::UartInit() {
-    pinMode(13, OUTPUT);
+
     event1.txEventHandler = txEvent1;             //defines the function to trigger for sent bytes on Port 1 of the Teensy
     event1.rxEventHandler = rxEvent1;             //defines the function to trigger for received bytes on Port 1 of the Teensy
     event1.rxBufferSizeTrigger = 1;               //defines how many bytes have to enter the input buffer until the interrupt triggers the interrupt function
@@ -91,8 +91,8 @@ void DynamixelController::readFromUSB() {
                 idx = 0;
                 newData = true;
                 inProgress = false;
-                /*s = buf;
-                jsonParser(s);*/
+                s = buf;
+                jsonParser(s);
             }
         }
         else if (c == '{') {
@@ -169,4 +169,22 @@ void DynamixelController::writeToUART() {
             delete USBMessage;
         }
     }
+}
+
+void DynamixelController::txEvent( IntervalTimer* timer,                                               //Timer interrupt that triggers a function if a message does not
+              void (*noMessageReceivalFunctionPointer)(void)){                    //reply after the time specified in begin(). The timer uses Âµseconds as a unit.
+  timer->priority(255);
+  timer->begin(noMessageReceivalFunctionPointer,300);
+}
+
+void DynamixelController::txEvent1(){
+  txEvent(&txTimer1, noMessageReceival1);
+}
+
+void DynamixelController::txEvent2(){
+  txEvent(&txTimer2, noMessageReceival2);
+}
+
+void DynamixelController::txEvent3(){
+  txEvent(&txTimer3, noMessageReceival3);
 }
