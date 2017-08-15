@@ -36,8 +36,9 @@ void readSensorData();
 void convertSensorDataToJson(int sensorData[][8]);
 void writeSensorDataToUSB(JsonObject& root);
 
-class I2C_Data {
+class I2C {
     public:
+        void initI2C();
         int getI2CSensorData(int add, int ch);
     private:
         uint8_t address[5] = {AD0, AD1, AD2, AD3, AD4};

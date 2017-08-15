@@ -1,11 +1,12 @@
 #include "mobrobSensor.hpp"
 
-void initI2C() {
+void I2C::initI2C() {
     Wire.begin(I2C_MASTER, 0x00, I2C_PINS_18_19, I2C_PULLUP_EXT, I2C_RATE_400);
+    Serial.println("I2C Initialization complete!");
 }
 
 void readSensorData() {
-    I2C_Data i2c;
+    I2C i2c;
     int sensorData[5][8] = {0};
     for (size_t i = 0; i < 2; i++) {
         for (size_t j = 0; j < 8; j++) {
@@ -20,8 +21,7 @@ void readSensorData() {
     convertSensorDataToJson(sensorData);
 }
 
-int I2C_Data::getI2CSensorData(int add, int ch) {
-
+int I2C::getI2CSensorData(int add, int ch) {
     Wire.beginTransmission(address[add]);     // slave addr
     Wire.write(channel[ch]);
     int status = Wire.endTransmission();

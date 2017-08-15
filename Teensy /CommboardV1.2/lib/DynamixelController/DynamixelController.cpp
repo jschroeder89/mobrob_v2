@@ -66,15 +66,14 @@ void scanIDs::scanPort() {
         send2();
         send3();
         while(busy1 && busy2 && busy3){
-            delay(10);                                                                  //Waiting for ports to finish writing all messages
+            delay(10);                                                                 //Waiting for ports to finish writing all messages
         }
         scanMode=false;
     }
+    Serial.println("DONE!");
 }
 
 void init() {
-    pinMode(13, OUTPUT);
-    digitalWrite(13, HIGH);
     Uart1Event event1;//initialize UART A of the Teensy for enhanced features like DMA capability
     Uart2Event event2;//initialize UART B ""
     Uart3Event event3;//initialize UART C ""
@@ -99,9 +98,9 @@ void init() {
 
     delay(4000);
     scanIDs portInit;
-    portInit.scanPort();
+    //portInit.scanPort();
     delay(2000);
-    digitalWrite(13, LOW);
+    Serial.println("UART Initialization complete!");
 }
 
 void readFromUSB() {
@@ -294,12 +293,15 @@ void requestHandler() {
         char requestByte = Serial.read();
         switch (requestByte) {
             case sensorReadByte:
+                Serial.println(sensorReadByte);
                 readSensorData();
                 break;
             case servoReadByte:
+                Serial.println(servoReadByte);
                 servoReadPcktConstructor();
                 break;
             case servoWrite:
+                Serial.println(servoWriteByte);
                 readFromUSB();
                 break;
         }

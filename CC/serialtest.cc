@@ -61,7 +61,11 @@ void requestHandler(int fd, int op) {
                 byte = servoWriteByte;
                 break;
     }
-    write(fd, &byte, sizeof byte);
+    int n = write(fd, &byte, sizeof byte);
+    std::cout << n << std::endl;
+    if (n <= 0) {
+        std::cout << "No bytes writen!" << std::endl;
+    }
 }
 
 std::string readFromUSB(int fd) {
@@ -154,8 +158,8 @@ void convertVelocitiesToJson(int fd, int velLeft, int velRight) {
 int main(int argc, char *argv[]) {
   int fd = 0;
   fd = openPort("/dev/ttyACM0");
-  requestHandler(fd, servoWrite);
-  convertVelocitiesToJson(fd, 500, 50);
+  requestHandler(fd, sensorRead);
+  //convertVelocitiesToJson(fd, 500, 50);
   //jsonParser(readPort(fd));
   return 0;
 }
