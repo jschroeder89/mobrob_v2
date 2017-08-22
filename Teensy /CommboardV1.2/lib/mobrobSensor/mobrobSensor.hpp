@@ -6,7 +6,7 @@
 #include <i2c_t3.h>
 #include <Arduino.h>
 
-#define bufLen 512
+#define bufLen 1024
 
 //AD-Channels-Addresses
 #define AD0 0x08 // 0001000
@@ -30,15 +30,13 @@
 #define CH7       0xF8 // 11111000
 #define CHGLOBAL  0xD6 // 11010110
 
-void initI2C();
 void readSensorData();
-//int getI2CSensorData(int add, int ch);
 void convertSensorDataToJson(int sensorData[][8]);
 void writeSensorDataToUSB(JsonObject& root);
 
 class I2C {
     public:
-        void initI2C();
+        void initializeI2C();
         int getI2CSensorData(int add, int ch);
     private:
         uint8_t address[5] = {AD0, AD1, AD2, AD3, AD4};

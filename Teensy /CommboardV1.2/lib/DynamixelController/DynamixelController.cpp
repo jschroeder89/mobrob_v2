@@ -39,7 +39,7 @@ void scanIDs::scanPort() {
         search[i]=0;
     }
 
-    for(int k=0;k<8;k++){
+    for(int k=0;k<6;k++){
         for (int j=32*k;j<32*(k+1);j++){
             search[0]=255;
             search[1]=255;
@@ -48,9 +48,9 @@ void scanIDs::scanPort() {
             search[4]=2;
             search[5]=3;
             search[6]=1;
-            DynamixelMessage* ScanMessage1= new DynamixelMessage(search); //messages are being generated and put
-            DynamixelMessage* ScanMessage2= new DynamixelMessage(search); //
-            DynamixelMessage* ScanMessage3= new DynamixelMessage(search); //
+            DynamixelMessage* ScanMessage1 = new DynamixelMessage(search); //messages are being generated and put
+            DynamixelMessage* ScanMessage2 = new DynamixelMessage(search); //
+            DynamixelMessage* ScanMessage3 = new DynamixelMessage(search); //
 
             QueueArray <DynamixelMessage*> queue1(50);
             QueueArray <DynamixelMessage*> queue2(50);
@@ -98,7 +98,7 @@ void init() {
 
     delay(4000);
     scanIDs portInit;
-    //portInit.scanPort();
+    portInit.scanPort();
     delay(2000);
     Serial.println("UART Initialization complete!");
 }
