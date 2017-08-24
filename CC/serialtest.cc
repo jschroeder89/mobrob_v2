@@ -156,10 +156,10 @@ void convertVelocitiesToJson(int fd, int velLeft, int velRight) {
 }
 
 int main(int argc, char *argv[]) {
-  int fd = 0;
-  fd = openPort("/dev/ttyACM0");
-  requestHandler(fd, sensorRead);
-  //convertVelocitiesToJson(fd, 500, 50);
-  //jsonParser(readPort(fd));
-  return 0;
+    int fd = 0;
+    fd = openPort("/dev/ttyACM0");
+    requestHandler(fd, sensorRead);
+    //convertVelocitiesToJson(fd, 500, 50);
+    //jsonParser(readPort(fd));
+    return 0;
 }

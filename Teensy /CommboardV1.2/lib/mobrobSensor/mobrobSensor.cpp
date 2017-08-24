@@ -44,7 +44,6 @@ void convertSensorDataToJson(int sensorData[][8]) {
     StaticJsonBuffer<bufLen> jsonBuffer;
     JsonObject& root = jsonBuffer.createObject();
     root["data"] = "sensor";
-    //JsonArray& sensorFront = root.createNestedArray("R"); //in case 5 arrays wont work
     JsonArray& sensorFrontLeft = root.createNestedArray("FL");
     JsonArray& sensorFrontRight = root.createNestedArray("FR");
     JsonArray& sensorRight = root.createNestedArray("R");
@@ -67,5 +66,5 @@ void convertSensorDataToJson(int sensorData[][8]) {
 }
 
 void writeSensorDataToUSB(JsonObject& root) {
-    root.prettyPrintTo(Serial);
+    root.printTo(Serial);
 }
