@@ -64,15 +64,15 @@ void readStatusPckt(uint8_t* rcvdPkt);
 void readFromUSB();
 
 void requestHandler();
+void scanPort();
 
 
-class scanIDs {
+/*class scanIDs {
     public:
         volatile uint8_t idMap[256];
-        void scanPort();
         volatile bool usbMode=false;
         volatile bool scanMode=false;
-};
+};*/
 
 
 #endif

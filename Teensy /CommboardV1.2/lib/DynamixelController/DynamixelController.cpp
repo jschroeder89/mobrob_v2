@@ -27,7 +27,11 @@ volatile uint8_t resendCounter1=0;
 volatile uint8_t resendCounter2=0;
 volatile uint8_t resendCounter3=0;
 
-void scanIDs::scanPort() {
+volatile uint8_t idMap[256];
+volatile bool usbMode=false;
+volatile bool scanMode=false;
+
+void scanPort() {
     scanMode = true;
 
     for (int i=0;i<254;i++){
@@ -97,8 +101,7 @@ void init() {
     event3.clear();
 
     delay(4000);
-    scanIDs portInit;
-    portInit.scanPort();
+    scanPort();
     delay(2000);
     Serial.println("UART Initialization complete!");
 }
@@ -146,19 +149,18 @@ void readFromUSB() {
 }
 
 void writeToUART(uint8_t* servoPckt) {
-    scanIDs portInit;
     DynamixelMessage* USBMessage = new DynamixelMessage(servoPckt);
 
-    if (portInit.idMap[servoPckt[2]] == 1 || portInit.scanMode) {
+    if (idMap[servoPckt[2]] == 1 || scanMode) {
         pushToQueue1(USBMessage);
     }
-    else if (portInit.idMap[servoPckt[2]] == 2 || portInit.scanMode) {
+    else if (idMap[servoPckt[2]] == 2 || scanMode) {
         pushToQueue2(USBMessage);
     }
-    else if (portInit.idMap[servoPckt[2]] == 3 || portInit.scanMode) {
+    else if (idMap[servoPckt[2]] == 3 || scanMode) {
         pushToQueue3(USBMessage);
     }
-    else if (portInit.idMap[servoPckt[2]] == 0) {
+    else if (idMap[servoPckt[2]] == 0) {
         delete USBMessage;
     }
 }
@@ -310,7 +312,6 @@ void requestHandler() {
 }
 
 void rxSerialEventUsb(){
-    scanIDs portInit;
  posInArrayUsb=0;
  if (!Serial.available()){
    return;
@@ -347,13 +348,13 @@ void rxSerialEventUsb(){
             // Serial.println(rcvdPktUsb[i]);
            }
 
-           if (portInit.idMap[rcvdPktUsb[2]] == 1 || portInit.scanMode){
+           if (idMap[rcvdPktUsb[2]] == 1 || scanMode){
              pushToQueue1(USBMessage);
-         }else if(portInit.idMap[rcvdPktUsb[2]] == 2 || portInit.scanMode){
+         }else if(idMap[rcvdPktUsb[2]] == 2 || scanMode){
              pushToQueue2(USBMessage);
-         }else if(portInit.idMap[rcvdPktUsb[2]] == 3 || portInit.scanMode){
+         }else if(idMap[rcvdPktUsb[2]] == 3 || scanMode){
              pushToQueue3(USBMessage);
-         }else if(portInit.idMap[rcvdPktUsb[2]] == 0){
+         }else if(idMap[rcvdPktUsb[2]] == 0){
              //Serial.println("Could not find this Servo!");
              delete USBMessage;
            }
@@ -448,7 +449,6 @@ void rxEvent( UartEvent*          event,
               volatile uint8_t*   resendCounter,
               void (*rxResyncFunctionPointer)(void),
               void(*sendFunctionPointer)(void)){
-                  scanIDs portInit;
                   Vector<int> statusPckt;
   if ((*sync) == true){
     if ((*posInArray) >= 4){
@@ -477,9 +477,9 @@ void rxEvent( UartEvent*          event,
         event->setRxBufferSizeTrigger(1);
       }
       //Serial.println("Correct checksum from Servo");
-      if(portInit.scanMode){
-        portInit.idMap[rcvdPkt[2]]=uartInt;
-    }else if (portInit.usbMode){
+      if(scanMode){
+        idMap[rcvdPkt[2]]=uartInt;
+    }else if (usbMode){
         //Serial.println("Sending back this Message to USB :");
         for (int i=0;i<(*posInArray);i++){
          // Serial.println(rcvdPkt[i]);
