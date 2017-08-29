@@ -15,7 +15,8 @@
 #define servoReadByte '2'
 #define servoWriteByte '3'
 #define FF 255
-#define _LENGHT 5
+#define _WRITE_LENGHT 5
+#define _READ_LENGHT 4
 #define _NUM_OF_BYTES_TO_READ 2
 #define NumOfSensors 5
 #define lenPos 3
@@ -23,7 +24,7 @@
 #define sensorRead 1
 #define servoRead 2
 #define servoWrite 3
-#define bufLen 512
+#define bufLen 1024
 #define jsonBufLen 256
 
 void rxEvent1();              //interrupt functions for the input buffer on the UART ports
@@ -59,20 +60,11 @@ void parseJsonString(String s);
 void servoWritePcktConstructor(Vector<int>* velArray);
 void servoReadPcktConstructor(int* servoPckt);
 void writeToUART();
-void convertVelocities(Vector<int>* servoPckt);
+void convertToReadableVelocities(Vector<int>* servoPckt);
 void readStatusPckt(uint8_t* rcvdPkt);
 void readFromUSB();
 
 void requestHandler();
 void scanPort();
-
-
-/*class scanIDs {
-    public:
-        volatile uint8_t idMap[256];
-        volatile bool usbMode=false;
-        volatile bool scanMode=false;
-};*/
-
 
 #endif

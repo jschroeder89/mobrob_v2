@@ -167,12 +167,12 @@ void writeToUART(uint8_t* servoPckt) {
 
 void readStatusPckt(Vector<int>* statusPckt) {
     if (statusPckt->at(0) != 0) {
-        convertVelocities(statusPckt);
+        convertToReadableVelocities(statusPckt);
     }
 }
 
 
-void convertVelocities(Vector<int>* servoPckt) {
+void convertToReadableVelocities(Vector<int>* servoPckt) {
     int lowByte = 0, highByte = 0;
     static int velLeft, velRight;
     static boolean velLeftNotEmpty;
@@ -188,6 +188,7 @@ void convertVelocities(Vector<int>* servoPckt) {
             velLeft *= (-1);
         }
     }
+
     else if (servoPckt->at(0) == 2 && velRightNotEmpty == true) {
         lowByte = lowByte & 255;
         highByte = highByte << 8;
@@ -213,56 +214,61 @@ void convertVelocities(Vector<int>* servoPckt) {
 }
 
 void servoReadPcktConstructor() {
-    uint8_t servoPckt[8]{0};
-    size_t checkSum = 0, checkSumPos = 0, len = 0;
-    for (size_t id = 1; id <=2; id++) {
-        servoPckt[0] = FF;
-        servoPckt[1] = FF;
+    uint8_t servoPckt[8] {FF, FF, 0, _READ_LENGHT, _READ_SERVO_DATA,
+        SERVO_REGISTER_PRESENT_SPEED, _NUM_OF_BYTES_TO_READ, 0};
+    for (uint8_t id = 1; id <=2; id++) {
+        uint8_t checkSum = 0;
         servoPckt[2] = id;
-        servoPckt[3] = _LENGHT;
-        servoPckt[4] = _READ_SERVO_DATA;
-        servoPckt[5] = SERVO_REGISTER_PRESENT_SPEED;
-        servoPckt[6] = _NUM_OF_BYTES_TO_READ;
-        len = servoPckt[lenPos] + lenConst;
-        //checkSumPos =  len + 1;
-            for (size_t i = 2; i < len; i++) {
-                checkSum += servoPckt[i];
-            }
+        for (size_t i = 2; i < sizeof servoPckt-1; i++) {
+            checkSum += servoPckt[i];
+        }
         checkSum = ~(checkSum) & 255;
-        servoPckt[7] = checkSum;
+    servoPckt[sizeof servoPckt-1] = checkSum;
 
-        writeToUART(&servoPckt[0]);
+    Serial.print("ServoPacket for ID: ");
+    Serial.println(id);
+    for (size_t i = 0; i < sizeof servoPckt; i++) {
+        Serial.print(servoPckt[i] );
+        Serial.print(" ");
+    }
+    Serial.println("");
+    writeToUART(&servoPckt[0]);
     }
 }
 
 void servoWritePcktConstructor(Vector<int>* velArray) {
-    uint8_t servoPckt[8]{0};
-    size_t checkSum = 0, checkSumPos = 0, len = 0;
-    int val = 0;
-    for (size_t id = 1; id <= 2; id++) {
-        servoPckt[0] = FF;
-        servoPckt[1] = FF;
+    Serial.println(velArray->at(0));
+    Serial.println(velArray->at(1));
+    uint8_t servoPckt[9] {FF, FF, 0, _WRITE_LENGHT, _WRITE_SERVO_DATA,
+        SERVO_REGISTER_MOVING_SPEED, 0, 0, 0};
+    for (uint8_t id = 1; id <= 2; id++) {
+        int val = 0;
+        uint8_t checkSum = 0;
         servoPckt[2] = id;
-        servoPckt[3] = _LENGHT;
-        servoPckt[4] = _WRITE_SERVO_DATA;
-        val = velArray->at(id);
+        val = velArray->at(id-1);
         if (val < 0) {
             val *= (-1);
             val += 1024;
         }
-        servoPckt[5] = val & 255;
-        servoPckt[6] = val >> 8;
-        len = servoPckt[lenPos] + lenConst;
-        //checkSumPos =  len + 1;
-            for (size_t i = 2; i < len; i++) {
+        servoPckt[6] = val & 255;
+        servoPckt[7] = val >> 8;
+            for (size_t i = 2; i < sizeof servoPckt-1; i++) {
                 checkSum += servoPckt[i];
             }
         checkSum = ~(checkSum) & 255;
-        servoPckt[7] = checkSum;
-        velArray->clear();
+        servoPckt[sizeof servoPckt-1] = checkSum;
 
+
+        Serial.print("ServoPacket for ID: ");
+        Serial.println(id);
+        for (size_t i = 0; i < sizeof servoPckt; i++) {
+            Serial.print(servoPckt[i] );
+            Serial.print(" ");
+        }
+        Serial.println("");
         writeToUART(&servoPckt[0]);
     }
+    velArray->clear();
 }
 
 void parseJsonString(String s) {
@@ -302,7 +308,7 @@ void requestHandler() {
                 Serial.println(servoReadByte);
                 servoReadPcktConstructor();
                 break;
-            case servoWrite:
+            case servoWriteByte:
                 Serial.println(servoWriteByte);
                 readFromUSB();
                 break;

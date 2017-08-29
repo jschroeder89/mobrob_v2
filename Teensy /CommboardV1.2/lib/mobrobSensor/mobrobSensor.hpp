@@ -6,7 +6,7 @@
 #include <i2c_t3.h>
 #include <Arduino.h>
 
-#define bufLen 1024
+#define jsonStringLen 1024
 
 //AD-Channels-Addresses
 #define AD0 0x08 // 0001000

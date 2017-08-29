@@ -41,7 +41,7 @@ int I2C::getI2CSensorData(int add, int ch) {
 }
 
 void convertSensorDataToJson(int sensorData[][8]) {
-    StaticJsonBuffer<bufLen> jsonBuffer;
+    StaticJsonBuffer<jsonStringLen> jsonBuffer;
     JsonObject& root = jsonBuffer.createObject();
     root["data"] = "sensor";
     JsonArray& sensorFrontLeft = root.createNestedArray("FL");

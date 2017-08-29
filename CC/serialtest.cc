@@ -15,8 +15,8 @@
 #define servoReadByte '2'
 #define servoWrite 3
 #define servoWriteByte '3'
-#define bufLen 512
-#define jsonBufLen 512
+#define bufLen 128
+#define jsonBufLen 128
 
 //Prototypes
 int openPort(char const *port);
@@ -62,7 +62,8 @@ void requestHandler(int fd, int op) {
                 break;
     }
     int n = write(fd, &byte, sizeof byte);
-    std::cout << n << std::endl;
+    std::cout << "Written " << n << " Byte(s)" << std::endl;
+    std::cout << byte << std::endl;
     if (n <= 0) {
         std::cout << "No bytes writen!" << std::endl;
     }
@@ -130,12 +131,12 @@ std::vector<int> jsonServoParser(std::string json) {
     return servoData;
 }
 
-void writeToUSB(int fd, JsonObject& root) {
-    char buffer[bufLen];
+void writeToUSB(int fd, JsonObject& root, int bufferSize) {
+    char buffer[bufferSize];
     root.printTo(buffer, sizeof buffer);
     int n = write(fd, &buffer, sizeof buffer);
-    std::cout << n << std::endl;
     if (n > 0) {
+        std::cout << "Written " << n << " Byte(s)" << std::endl;
         std::cout << buffer << std::endl;
     }
 }
@@ -152,14 +153,15 @@ void convertVelocitiesToJson(int fd, int velLeft, int velRight) {
     root["velLeft"] = velLeft;
     root["velRight"] = velRight;
 
-    writeToUSB(fd, root);
+    int bufferSize = root.measureLength();
+
+    writeToUSB(fd, root, bufferSize);
 }
 
 int main(int argc, char *argv[]) {
     int fd = 0;
     fd = openPort("/dev/ttyACM0");
-    requestHandler(fd, sensorRead);
-    //convertVelocitiesToJson(fd, 500, 50);
-    //jsonParser(readPort(fd));
+    requestHandler(fd, servoWrite);
+    setVelocities(fd, 50, 60);
     return 0;
 }
